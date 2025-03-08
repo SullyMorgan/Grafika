@@ -125,7 +125,8 @@ namespace Szeminarium1
                 0, 1, 2,
                 2, 1, 3
             };
-
+            // a.
+            // mert nincs commit
             uint vertices = Gl.GenBuffer();
             Gl.BindBuffer(GLEnum.ArrayBuffer, vertices);
             Gl.BufferData(GLEnum.ArrayBuffer, (ReadOnlySpan<float>)vertexArray.AsSpan(), GLEnum.StaticDraw);
