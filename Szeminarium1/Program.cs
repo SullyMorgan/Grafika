@@ -52,7 +52,7 @@ namespace Szeminarium1
 
             graphicWindow.Run();
         }
-
+        // valami valtozas a kodban
         private static void GraphicWindow_Load()
         {
             // egszeri beallitasokat
