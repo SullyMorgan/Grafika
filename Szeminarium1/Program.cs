@@ -53,6 +53,16 @@ namespace Szeminarium1
             graphicWindow.Run();
         }
         // valami valtozas a kodban
+
+        private static void CheckForErrors()
+        {
+            GLEnum error;
+            while ((error = Gl.GetError()) != GLEnum.NoError)
+            {
+                Console.WriteLine($"OpenGL Error: {error}");
+            }
+        }
+
         private static void GraphicWindow_Load()
         {
             // egszeri beallitasokat
