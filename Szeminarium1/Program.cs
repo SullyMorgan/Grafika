@@ -52,16 +52,6 @@ namespace Szeminarium1
 
             graphicWindow.Run();
         }
-        // valami valtozas a kodban
-
-        private static void CheckForErrors()
-        {
-            GLEnum error;
-            while ((error = Gl.GetError()) != GLEnum.NoError)
-            {
-                Console.WriteLine($"OpenGL Error: {error}");
-            }
-        }
 
         private static void GraphicWindow_Load()
         {
@@ -118,21 +108,51 @@ namespace Szeminarium1
             Gl.BindVertexArray(vao);
 
             float[] vertexArray = new float[] {
+                // elso
+                 0.5f,  0.5f, 0.0f,
+                -0.5f,  0.5f, 0.0f,
                 -0.5f, -0.5f, 0.0f,
-                +0.5f, -0.5f, 0.0f,
-                 0.0f, +0.5f, 0.0f,
-                 1f, 1f, 0f
+                 0.5f, -0.5f, 0.0f,
+
+                // felso
+                 0.8f,  0.8f, 0.0f,
+                -0.2f,  0.8f, 0.0f,
+                 0.5f,  0.5f, 0.0f,
+                -0.5f,  0.5f, 0.0f,
+
+                // oldalso
+                0.8f,  0.8f, 0.0f,
+                0.5f,  0.5f, 0.0f,
+                0.5f, -0.5f, 0.0f,
+                0.8f, -0.2f, 0.0f
             };
 
             float[] colorArray = new float[] {
-                1.0f, 1.0f, 0.0f, 1.0f,
-                0.0f, 1.0f, 0.0f, 1.0f,
-                0.0f, 0.0f, 1.0f, 1.0f,
                 1.0f, 0.0f, 0.0f, 1.0f,
+                1.0f, 0.0f, 0.0f, 1.0f,
+                1.0f, 0.0f, 0.0f, 1.0f,
+                1.0f, 0.0f, 0.0f, 1.0f,
+
+                0.0f, 0.0f, 1.0f, 1.0f,
+                0.0f, 0.0f, 1.0f, 1.0f,
+                0.0f, 0.0f, 1.0f, 1.0f,
+                0.0f, 0.0f, 1.0f, 1.0f,
+
+                0.0f, 1.0f, 0.0f, 1.0f,
+                0.0f, 1.0f, 0.0f, 1.0f,
+                0.0f, 1.0f, 0.0f, 1.0f,
+                0.0f, 1.0f, 0.0f, 1.0f
             };
 
-            uint[] indexArray = new uint[] { 
-                2, 1, 3
+            uint[] indexArray = new uint[] {
+                0, 1, 2,
+                2, 3, 0,
+
+                4, 5, 6,
+                6, 5, 7,
+
+                8, 9, 10,
+                10, 11, 8
             };
 
             uint vertices = Gl.GenBuffer();
@@ -146,9 +166,7 @@ namespace Szeminarium1
             Gl.BufferData(GLEnum.ArrayBuffer, (ReadOnlySpan<float>)colorArray.AsSpan(), GLEnum.StaticDraw);
             Gl.VertexAttribPointer(1, 4, VertexAttribPointerType.Float, false, 0, null);
             Gl.EnableVertexAttribArray(1);
-            // comment dababy
-            // legyen egy valtozas
-            // meg egy valtozas
+
             uint indices = Gl.GenBuffer();
             Gl.BindBuffer(GLEnum.ElementArrayBuffer, indices);
             Gl.BufferData(GLEnum.ElementArrayBuffer, (ReadOnlySpan<uint>)indexArray.AsSpan(), GLEnum.StaticDraw);
@@ -156,7 +174,7 @@ namespace Szeminarium1
             Gl.BindBuffer(GLEnum.ArrayBuffer, 0);
 
             Gl.UseProgram(program);
-            
+
             Gl.DrawElements(GLEnum.Triangles, (uint)indexArray.Length, GLEnum.UnsignedInt, null); // we used element buffer
             Gl.BindBuffer(GLEnum.ElementArrayBuffer, 0);
             Gl.BindVertexArray(vao);
