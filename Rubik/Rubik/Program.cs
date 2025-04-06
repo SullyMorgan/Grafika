@@ -1,6 +1,9 @@
-﻿using Silk.NET.OpenGL;
+﻿using Silk.NET.Input;
+using Silk.NET.OpenGL;
 using Silk.NET.Windowing;
+using Silk.NET.Maths;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Rubik
 {
@@ -9,6 +12,24 @@ namespace Rubik
         private static IWindow window;
         private static GL Gl;
         private static uint program;
+        private static IInputContext inputContext;
+
+        private static Vector3 cameraPosition = new Vector3(5, 5, 5);
+        private static Vector3 cameraFront = Vector3.Normalize(-cameraPosition);
+        private static Vector3 cameraUp = Vector3.UnitY;
+        private static float cameraSpeed = 0.1f;
+        private static float yaw = -90f;
+        private static float pitch = 0f;
+        private static float lastX = 400f;
+        private static float lastY = 400f;
+        private static bool firstMouse = true;
+
+        private static Matrix4x4 rotationMatrix = Matrix4x4.Identity;
+        private static bool isRotating = false;
+        private static float rotationAngle = 0f;
+        private static Vector3 rotationAxis = Vector3.UnitX;
+        private static int selectedLayer = 0;
+        private static float rotationSpeed = 2f;
 
         private static readonly string VertexShaderSource = @"
         #version 330 core
@@ -20,6 +41,7 @@ namespace Rubik
         uniform mat4 model;
         uniform mat4 view;
         uniform mat4 projection;
+        uniform mat4 rotation;
 
         void main()
         {
@@ -110,14 +132,29 @@ namespace Rubik
 
             window.Load += GraphicWindow_Load;
             window.Render += GraphicWindow_Render;
+            window.Update += GraphicWindow_Update;
+            window.Closing += GraphicWindow_Closing;
 
             window.Run();
         }
 
         private static unsafe void GraphicWindow_Load()
         {
+            inputContext = window.CreateInput();
+            foreach (var keyboard in inputContext.Keyboards)
+            {
+                keyboard.KeyDown += Keyboard_KeyDown;
+            }
+
+            foreach (var mouse in inputContext.Mice)
+            {
+                mouse.MouseMove += Mouse_MouseMove;
+                mouse.Scroll += Mouse_Scroll;
+            }
+
             Gl = window.CreateOpenGL();
-            Gl.ClearColor(1f, 1f, 1f, 1f);
+            Gl.ClearColor(0.1f, 0.1f, 0.1f, 1f);
+            Gl.Enable(EnableCap.DepthTest);
 
             uint vshader = Gl.CreateShader(ShaderType.VertexShader);
             uint fshader = Gl.CreateShader(ShaderType.FragmentShader);
@@ -151,6 +188,131 @@ namespace Rubik
                         Cubes.Add(CreateCube(new Vector3(x * spacing, y * spacing, z * spacing)));
         }
 
+        private static void GraphicWindow_Closing()
+        {
+            Gl.DeleteBuffer(VertexBuffer);
+            Gl.DeleteBuffer(IndexBuffer);
+            Gl.DeleteProgram(program);
+            foreach (var cube in Cubes)
+            {
+                Gl.DeleteVertexArray(cube.VAO);
+                Gl.DeleteBuffer(cube.ColorBuffer);
+            }
+        }
+
+        private static void Mouse_MouseMove(IMouse mouse, System.Numerics.Vector2 position)
+        {
+            if (mouse.IsButtonPressed(MouseButton.Left))
+            {
+                if (firstMouse)
+                {
+                    lastX = position.X;
+                    lastY = position.Y;
+                    firstMouse = false;
+                }
+
+                float xoffset = position.X - lastX;
+                float yoffset = lastY - position.Y;
+                lastX = position.X;
+                lastY = position.Y;
+
+                float sensitivity = 0.1f;
+                xoffset *= sensitivity;
+                yoffset *= sensitivity;
+                yaw += xoffset;
+                pitch += yoffset;
+
+                pitch = Math.Clamp(pitch, -89f, 89f);
+
+                Vector3 front;
+                front.X = MathF.Cos(MathHelper.DegreesToRadians(yaw)) * MathF.Cos(MathHelper.DegreesToRadians(pitch));
+                front.Y = MathF.Sin(MathHelper.DegreesToRadians(pitch));
+                front.Z = MathF.Sin(MathHelper.DegreesToRadians(yaw)) * MathF.Cos(MathHelper.DegreesToRadians(pitch));
+                cameraFront = Vector3.Normalize(front);
+            }
+            else
+            {
+                firstMouse = true;
+            }
+        }
+
+        private static void Mouse_Scroll(IMouse mouse, ScrollWheel scroll)
+        {
+            cameraSpeed += scroll.Y * 0.1f;
+            cameraSpeed += Math.Clamp(cameraSpeed, 0.01f, 1f);
+        }
+
+        private static void Keyboard_KeyDown(IKeyboard keyboard, Key key, int arg3)
+        {
+            if (key == Key.Escape)
+            {
+                window.Close();
+            }
+
+            if (key == Key.Space && selectedLayer != 0 && !isRotating)
+            {
+                isRotating = true;
+                rotationAngle = 0f;
+            }
+
+            if (key == Key.Backspace && selectedLayer != 0 && !isRotating)
+            {
+                isRotating = true;
+                rotationAngle = 0f;
+                rotationSpeed = -rotationSpeed;
+            }
+
+            if (key >= Key.Number1 && key <= Key.Number9)
+            {
+                selectedLayer = (int)key - (int)Key.Number0;
+            }
+        }
+
+        private static void GraphicWindow_Update(double deltaTime)
+        {
+            var keyboard = inputContext.Keyboards[0];
+            float speed = cameraSpeed * (float)deltaTime * 60;
+
+            if (keyboard.IsKeyPressed(Key.W))
+                cameraPosition += cameraFront * speed;
+            if (keyboard.IsKeyPressed(Key.S))
+                cameraPosition -= cameraFront * speed;
+            if (keyboard.IsKeyPressed(Key.A))
+                cameraPosition -= Vector3.Normalize(Vector3.Cross(cameraFront, cameraUp)) * speed;
+            if (keyboard.IsKeyPressed(Key.D))
+                cameraPosition += Vector3.Normalize(Vector3.Cross(cameraFront, cameraUp)) * speed;
+            if (keyboard.IsKeyPressed(Key.Q))
+                cameraPosition += cameraUp * speed;
+            if (keyboard.IsKeyPressed(Key.E))
+                cameraPosition -= cameraUp * speed;
+
+            if (isRotating)
+            {
+                float rotationStep = rotationSpeed * (float)deltaTime * 60;
+                rotationAngle += rotationStep;
+
+                if (Math.Abs(rotationAngle) >= 90f)
+                {
+                    isRotating = false;
+                    rotationAngle = 0f;
+                    rotationSpeed = Math.Abs(rotationSpeed);
+
+                    ApplyRotationToLayer();
+                    rotationMatrix = Matrix4x4.Identity;
+                }
+                else
+                {
+                    if (selectedLayer >= 1 && selectedLayer <= 3)
+                        rotationAxis = Vector3.UnitX;
+                    else if (selectedLayer >= 4 && selectedLayer <= 6)
+                        rotationAxis = Vector3.UnitY;
+                    else if (selectedLayer >= 7 && selectedLayer <= 9)
+                        rotationAxis = Vector3.UnitZ;
+
+                    rotationMatrix = Matrix4x4.CreateFromAxisAngle(rotationAxis, MathHelper.DegreesToRadians(rotationStep));
+                }
+            }
+        }
         private static unsafe Cube CreateCube(Vector3 position)
         {
             uint vao = Gl.GenVertexArray();
@@ -201,31 +363,80 @@ namespace Rubik
             return colorList.ToArray();
         }
 
+        private static void ApplyRotationToLayer()
+        {
+            for (int i = 0; i < Cubes.Count; i++)
+            {
+                var cube = Cubes[i];
+                bool shouldRotate = false;
+                float layerPos = 0;
+
+                if (selectedLayer >= 1 && selectedLayer <= 3)
+                {
+                    layerPos = cube.Position.X;
+                    shouldRotate = (selectedLayer == 1 && layerPos < -0.5f) ||
+                                   (selectedLayer == 2 && Math.Abs(layerPos) < 0.5f) ||
+                                   (selectedLayer == 3 && layerPos > 0.5f);
+                }
+                else if (selectedLayer >= 4 && selectedLayer <= 6)
+                {
+                    layerPos = cube.Position.Y;
+                    shouldRotate = (selectedLayer == 4 && layerPos < -0.5f) ||
+                                   (selectedLayer == 5 && Math.Abs(layerPos) < 0.5f) ||
+                                   (selectedLayer == 6 && layerPos > 0.5f);
+                }
+                else if (selectedLayer >= 7 && selectedLayer <= 9)
+                {
+                    layerPos = cube.Position.Z;
+                    shouldRotate = (selectedLayer == 7 && layerPos < -0.5f) ||
+                                   (selectedLayer == 8 && Math.Abs(layerPos) < 0.5f) ||
+                                   (selectedLayer == 9 && layerPos > 0.5f);
+                }
+
+                if (shouldRotate)
+                {
+                    // Forgatás alkalmazása
+                    cube.Position = RotateVectorAroundAxis(cube.Position, rotationAxis, MathHelper.DegreesToRadians(90f) * Math.Sign(rotationSpeed));
+                    Cubes[i] = cube;  // A frissített kocka pozícióját visszaírjuk
+                }
+            }
+        }
+
+
+        private static Vector3 RotateVectorAroundAxis(Vector3 position, Vector3 axis, float angle)
+        {
+            var rotation = Matrix4x4.CreateFromAxisAngle(axis, angle);
+            return Vector3.Transform(position, rotation);
+        }
+
+
+
         private static unsafe void GraphicWindow_Render(double deltaTime)
         {
             Gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-            Gl.Enable(GLEnum.DepthTest);
-
+      
             Gl.UseProgram(program);
 
             Matrix4x4 view = Matrix4x4.CreateLookAt(
-                new Vector3(5, 5, 5),
-                Vector3.Zero,
-                Vector3.UnitY
+                cameraPosition,
+                cameraPosition + cameraFront,
+                cameraUp
                 );
 
             Matrix4x4 projection = Matrix4x4.CreatePerspectiveFieldOfView(
                 MathF.PI / 4,
-                1f,
+                (float)window.Size.X / window.Size.Y,
                 0.1f,
                 100f
                 );
 
             int viewLocation = Gl.GetUniformLocation(program, "view");
             int projectionLocation = Gl.GetUniformLocation(program, "projection");
+            int rotationLocation = Gl.GetUniformLocation(program, "rotation");
 
-            Gl.UniformMatrix4(viewLocation, 1, false, (float*)&view);
-            Gl.UniformMatrix4(projectionLocation, 1, false, (float*)&projection);
+            Gl.UniformMatrix4(viewLocation, 1, false, (float*)Unsafe.AsPointer(ref view.M11));
+            Gl.UniformMatrix4(projectionLocation, 1, false, (float*)Unsafe.AsPointer(ref projection.M11));
+
 
             foreach (var cube in Cubes)
             {
@@ -236,13 +447,55 @@ namespace Rubik
                 int modelLocation = Gl.GetUniformLocation(program, "model");
                 Gl.UniformMatrix4(modelLocation, 1, false, (float*)&model);
 
+                bool shouldRotate = false;
+                float layerPos = 0;
+
+                if (selectedLayer >= 1 && selectedLayer <= 3)
+                {
+                    layerPos = cube.Position.X;
+                    shouldRotate = (selectedLayer == 1 && layerPos < -0.5f) ||
+                                   (selectedLayer == 2 && Math.Abs(layerPos) < 0.5f) ||
+                                   (selectedLayer == 3 && layerPos > 0.5f);
+                }
+                else if (selectedLayer >= 4 && selectedLayer <= 6)
+                {
+                    layerPos = cube.Position.Y;
+                    shouldRotate = (selectedLayer == 4 && layerPos < -0.5f) ||
+                                   (selectedLayer == 5 && Math.Abs(layerPos) < 0.5f) ||
+                                   (selectedLayer == 6 && layerPos > 0.5f);
+                }
+                else if (selectedLayer >= 7 && selectedLayer <= 9)
+                {
+                    layerPos = cube.Position.Z;
+                    shouldRotate = (selectedLayer == 7 && layerPos < -0.5f) ||
+                                   (selectedLayer == 8 && Math.Abs(layerPos) < 0.5f) ||
+                                   (selectedLayer == 9 && layerPos > 0.5f);
+                }
+
+                if (shouldRotate && isRotating)
+                {
+                    Gl.UniformMatrix4(rotationLocation, 1, false, (float*)Unsafe.AsPointer(ref rotationMatrix.M11));
+                }
+                else
+                {
+                    Matrix4x4 identity = Matrix4x4.Identity;
+                    Gl.UniformMatrix4(rotationLocation, 1, false, (float*)&identity);
+                }
+
                 Gl.DrawElements(
                     GLEnum.Triangles,
                     (uint)CubeIndices.Length,
                     GLEnum.UnsignedInt,
-                    null
-                );
+                    null);
             }
+        }
+    }
+
+    public static class MathHelper
+    {
+        public static float DegreesToRadians(float degrees)
+        {
+            return degrees * (MathF.PI / 180f);
         }
     }
 }
