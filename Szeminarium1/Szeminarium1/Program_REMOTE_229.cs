@@ -156,60 +156,62 @@ namespace Szeminarium1
             uint vao = Gl.GenVertexArray();
             Gl.BindVertexArray(vao);
 
-            float[] vertexArray = new float[] {
-                // elso
-                 0.5f,  0.5f, 0.0f,
-                -0.5f,  0.5f, 0.0f,
-                -0.5f, -0.5f, 0.0f,
-                 0.5f, -0.5f, 0.0f,
+            Gl.BindBuffer(GLEnum.ArrayBuffer, VertexBuffer);
+            Gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 0, null);
+            Gl.EnableVertexAttribArray(0);
 
-                // felso
-                 0.8f,  0.8f, 0.0f,
-                -0.2f,  0.8f, 0.0f,
-                 0.5f,  0.5f, 0.0f,
-                -0.5f,  0.5f, 0.0f,
+            float[] colors = GenerateColors(position);
+            uint colorBuffer = Gl.GenBuffer();
+            Gl.BindBuffer(GLEnum.ArrayBuffer, colorBuffer);
+            Gl.BufferData(GLEnum.ArrayBuffer, (ReadOnlySpan<float>)colors, GLEnum.StaticDraw);
+            Gl.VertexAttribPointer(1, 4, VertexAttribPointerType.Float, false, 0, null);
+            Gl.EnableVertexAttribArray(1);
 
-                // oldalso
-                0.8f,  0.8f, 0.0f,
-                0.5f,  0.5f, 0.0f,
-                0.5f, -0.5f, 0.0f,
-                0.8f, -0.2f, 0.0f
+            return new Cube {
+                VAO = vao,
+                ColorBuffer = colorBuffer,
+                Position = position
             };
         }
 
-            float[] colorArray = new float[] {
-                1.0f, 0.0f, 0.0f, 1.0f,
-                1.0f, 0.0f, 0.0f, 1.0f,
-                1.0f, 0.0f, 0.0f, 1.0f,
-                1.0f, 0.0f, 0.0f, 1.0f,
+        private static float[] GenerateColors(Vector3 pos)
+        {
+            Vector4 gray = new(0.2f, 0.2f, 0.2f, 1.0f);
+            Vector4 red = new(1.0f, 0.0f, 0.0f, 1.0f);
+            Vector4 green = new(0.0f, 1.0f, 0.0f, 1.0f);
+            Vector4 blue = new(0.0f, 0.0f, 1.0f, 1.0f);
+            Vector4 yellow = new(1.0f, 1.0f, 0.0f, 1.0f);
+            Vector4 white = new(1.0f, 1.0f, 1.0f, 1.0f);
+            Vector4 orange = new(1.0f, 0.5f, 0.0f, 1.0f);
 
-                0.0f, 0.0f, 1.0f, 1.0f,
-                0.0f, 0.0f, 1.0f, 1.0f,
-                0.0f, 0.0f, 1.0f, 1.0f,
-                0.0f, 0.0f, 1.0f, 1.0f,
+            Vector4[] faceColors = new Vector4[6];
+            faceColors[0] = pos.Z > 0.5 ? green : gray;
+            faceColors[1] = pos.X > 0.5 ? red : gray;
+            faceColors[2] = pos.Z < -0.5 ? blue : gray;
+            faceColors[3] = pos.X < -0.5 ? orange : gray;
+            faceColors[4] = pos.Y > 0.5 ? white : gray;
+            faceColors[5] = pos.Y < -0.5 ? yellow : gray;
 
-                0.0f, 1.0f, 0.0f, 1.0f,
-                0.0f, 1.0f, 0.0f, 1.0f,
-                0.0f, 1.0f, 0.0f, 1.0f,
-                0.0f, 1.0f, 0.0f, 1.0f
-            };
+            List<float> colorList = new();
+            foreach (var face in faceColors)
+                for (int i = 0; i < 4; i++)
+                    colorList.AddRange(new[] { face.X, face.Y, face.Z, face.W });
 
-            uint[] indexArray = new uint[] {
-                0, 1, 2,
-                2, 3, 0,
+            return colorList.ToArray();
+        }
 
-                4, 5, 6,
-                6, 5, 7,
+        private static unsafe void GraphicWindow_Render(double deltaTime)
+        {
+            Gl.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+            Gl.Enable(GLEnum.DepthTest);
+            
+            Gl.UseProgram(program);
 
-                8, 9, 10,
-                10, 11, 8
-            };
-
-            uint vertices = Gl.GenBuffer();
-            Gl.BindBuffer(GLEnum.ArrayBuffer, vertices);
-            Gl.BufferData(GLEnum.ArrayBuffer, (ReadOnlySpan<float>)vertexArray.AsSpan(), GLEnum.StaticDraw);
-            Gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 0, null);
-            Gl.EnableVertexAttribArray(0);
+            Matrix4x4 view = Matrix4x4.CreateLookAt(
+                new Vector3(5, 5, 5),
+                Vector3.Zero,
+                Vector3.UnitY
+                );
 
             Matrix4x4 projection = Matrix4x4.CreatePerspectiveFieldOfView(
                 MathF.PI / 4,
@@ -224,11 +226,14 @@ namespace Szeminarium1
             Gl.UniformMatrix4(viewLocation, 1, false, (float*)&view);
             Gl.UniformMatrix4(projectionLocation, 1, false, (float*)&projection);
 
-            Gl.UseProgram(program);
+            foreach (var cube in Cubes)
+            {
+                Gl.BindVertexArray(cube.VAO);
+                Gl.BindBuffer(GLEnum.ElementArrayBuffer, IndexBuffer);
 
-            Gl.DrawElements(GLEnum.Triangles, (uint)indexArray.Length, GLEnum.UnsignedInt, null);
-            Gl.BindBuffer(GLEnum.ElementArrayBuffer, 0);
-            Gl.BindVertexArray(vao);
+                Matrix4x4 model = Matrix4x4.CreateTranslation(cube.Position);
+                int modelLocation = Gl.GetUniformLocation(program, "model");
+                Gl.UniformMatrix4(modelLocation, 1, false, (float*)&model);
 
                 Gl.DrawElements(
                     GLEnum.Triangles,
