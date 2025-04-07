@@ -395,9 +395,8 @@ namespace Rubik
 
                 if (shouldRotate)
                 {
-                    // Forgatás alkalmazása
                     cube.Position = RotateVectorAroundAxis(cube.Position, rotationAxis, MathHelper.DegreesToRadians(90f) * Math.Sign(rotationSpeed));
-                    Cubes[i] = cube;  // A frissített kocka pozícióját visszaírjuk
+                    Cubes[i] = cube;
                 }
             }
         }
