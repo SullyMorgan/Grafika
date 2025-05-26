@@ -149,7 +149,7 @@ namespace Szeminarium1_24_02_17_2
 
             LinkProgram();
 
-            //Gl.Enable(EnableCap.CullFace);
+            Gl.Enable(EnableCap.CullFace);
 
             Gl.Enable(EnableCap.DepthTest);
             Gl.DepthFunc(DepthFunction.Lequal);
