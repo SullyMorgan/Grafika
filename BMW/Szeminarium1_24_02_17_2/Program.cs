@@ -3,6 +3,7 @@ using Silk.NET.Input;
 using Silk.NET.Maths;
 using Silk.NET.OpenGL;
 using Silk.NET.OpenGL.Extensions.ImGui;
+using Silk.NET.Vulkan;
 using Silk.NET.Windowing;
 
 namespace Szeminarium1_24_02_17_2
@@ -36,10 +37,10 @@ namespace Szeminarium1_24_02_17_2
 
         private static float carSpeed = 5f; // egyseg/mp
         
-        private static Vector3D<float> carPosition = new Vector3D<float>(0f, 0f, 17.5f);
+        private static Vector3D<float> carPosition = new Vector3D<float>(0f, 0f, 0f);
         private static Vector3D<float> carDirection = new Vector3D<float>(0f, 0f, 1f);
+        private static float carRotation = 0f; // in radians
 
-        private static float carRotation = 90f; // in radians
         private static GlObject road;
         private static List<GlObject> buildings = new List<GlObject>();
         private static float[] face1Color = { 1f, 0f, 0f, 1.0f };
@@ -50,6 +51,13 @@ namespace Szeminarium1_24_02_17_2
         private const string NormalMatrixVariableName = "normal";
         private const string ViewMatrixVariableName = "view";
         private const string ProjectionMatrixVariableName = "projection";
+
+        private static bool isUserInputDetected = false;
+
+        // skybox
+        private static uint skyboxVAO, skyboxVBO;
+        private static uint skyboxProgram;
+        private static uint cubemapTexture;
 
         private static readonly string VertexShaderSource = @"
         #version 330 core
@@ -65,9 +73,11 @@ namespace Szeminarium1_24_02_17_2
         out vec3 FragPos;
         out vec3 Normal;
         out vec4 vertexColor;
+        out vec3 TexCoords;
 
         void main()
         {
+            TexCoords = aPos;
             FragPos = vec3(model * vec4(aPos, 1.0));
             Normal = normalize(normal * aNormal);
             vertexColor = aColor;
@@ -86,6 +96,7 @@ namespace Szeminarium1_24_02_17_2
         in vec3 FragPos;
         in vec3 Normal;
         in vec4 vertexColor;
+        in vec3 TexCoords;
 
         out vec4 FragColor;
 
@@ -119,6 +130,37 @@ namespace Szeminarium1_24_02_17_2
         }
         ";
 
+        private static readonly string SkyboxVertexShaderSource = @"
+        #version 330 core
+        layout (location = 0) in vec3 aPos;
+
+        out vec3 TexCoords;
+
+        uniform mat4 projection;
+        uniform mat4 view;
+
+        void main()
+        {
+            TexCoords = aPos;
+            vec4 pos = projection * view * vec4(aPos, 1.0);
+            gl_Position = pos.xyww;
+        }
+        ";
+
+        private static readonly string SkyboxFragmentShaderSource = @"
+        #version 330 core
+        out vec4 FragColor;
+
+        in vec3 TexCoords;
+
+        uniform samplerCube skybox;
+
+        void main()
+        {
+            FragColor = texture(skybox, TexCoords);
+        }
+        ";
+
         static void Main(string[] args)
         {
             WindowOptions windowOptions = WindowOptions.Default;
@@ -137,6 +179,74 @@ namespace Szeminarium1_24_02_17_2
 
             window.Run();
         }
+
+        /*private static unsafe void LoadSkybox()
+        {
+            // Skybox VAO és VBO létrehozása
+            float[] skyboxVertices = {
+                // positions          
+                -1.0f,  1.0f, -1.0f,
+                -1.0f, -1.0f, -1.0f,
+                 1.0f, -1.0f, -1.0f,
+                 1.0f, -1.0f, -1.0f,
+                 1.0f,  1.0f, -1.0f,
+                -1.0f,  1.0f, -1.0f,
+
+                -1.0f, -1.0f,  1.0f,
+                -1.0f, -1.0f, -1.0f,
+                -1.0f,  1.0f, -1.0f,
+                -1.0f,  1.0f, -1.0f,
+                -1.0f,  1.0f,  1.0f,
+                -1.0f, -1.0f,  1.0f,
+
+                 1.0f, -1.0f, -1.0f,
+                 1.0f, -1.0f,  1.0f,
+                 1.0f,  1.0f,  1.0f,
+                 1.0f,  1.0f,  1.0f,
+                 1.0f,  1.0f, -1.0f,
+                 1.0f, -1.0f, -1.0f,
+
+                -1.0f, -1.0f,  1.0f,
+                -1.0f,  1.0f,  1.0f,
+                 1.0f,  1.0f,  1.0f,
+                 1.0f,  1.0f,  1.0f,
+                 1.0f, -1.0f,  1.0f,
+                -1.0f, -1.0f,  1.0f,
+
+                -1.0f,  1.0f, -1.0f,
+                 1.0f,  1.0f, -1.0f,
+                 1.0f,  1.0f,  1.0f,
+                 1.0f,  1.0f,  1.0f,
+                -1.0f,  1.0f,  1.0f,
+                -1.0f,  1.0f, -1.0f,
+
+                -1.0f, -1.0f, -1.0f,
+                -1.0f, -1.0f,  1.0f,
+                 1.0f, -1.0f, -1.0f,
+                 1.0f, -1.0f, -1.0f,
+                -1.0f, -1.0f,  1.0f,
+                 1.0f, -1.0f,  1.0f
+            };
+
+            skyboxVAO = Gl.GenVertexArray();
+            skyboxVBO = Gl.GenBuffer();
+
+            Gl.BindVertexArray(skyboxVAO);
+            Gl.BindBuffer(BufferTargetARB.ArrayBuffer, skyboxVBO);
+            Gl.BufferData(BufferTargetARB.ArrayBuffer, (uint)(skyboxVertices.Length * sizeof(float)), skyboxVertices, BufferUsageARB.StaticDraw);
+            Gl.EnableVertexAttribArray(0);
+            Gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 3 * sizeof(float), (void*)0);
+
+            uint skyboxVertexShader = Gl.CreateShader(ShaderType.VertexShader);
+            Gl.ShaderSource(skyboxVertexShader, SkyboxVertexShaderSource);
+            Gl.CompileShader(skyboxVertexShader);
+
+            uint skyboxFragmentShader = Gl.CreateShader(ShaderType.FragmentShader);
+            Gl.ShaderSource(skyboxFragmentShader, SkyboxFragmentShaderSource);
+            Gl.CompileShader(skyboxFragmentShader);
+
+
+        }*/
 
         private static class MathHelper
         {
@@ -169,6 +279,10 @@ namespace Szeminarium1_24_02_17_2
 
             controller = new ImGuiController(Gl, window, inputContext);
 
+            /*carPosition = new Vector3D<float>(0f, 0f, 0f);
+            carDirection = new Vector3D<float>(0f, 0f, 1f);
+            carRotation = 0f; // in degrees
+            */
             LinkProgram();
             Gl.UseProgram(program);
             foreach (var keyboard in inputContext.Keyboards)
@@ -267,58 +381,76 @@ namespace Szeminarium1_24_02_17_2
 
         private static void Keyboard_KeyDown(IKeyboard keyboard, Key key, int arg3)
         {
+            const float moveSpeed = 1.0f;
+            const float rotationSpeed = 5.0f;
             switch (key)
             {
-                case Key.Left:
-                    cameraDescriptor.DecreaseZYAngle();
+                case Key.W:
+                    isUserInputDetected = true;
+                    carPosition += carDirection * moveSpeed;
                     break;
                     ;
-                case Key.Right:
-                    cameraDescriptor.IncreaseZYAngle();
+                case Key.S:
+                    isUserInputDetected = true;
+                    carPosition -= carDirection * moveSpeed;
                     break;
-                case Key.Down:
-                    cameraDescriptor.IncreaseDistance();
-                    break;
-                case Key.Up:
-                    cameraDescriptor.DecreaseDistance();
-                    break;
-                case Key.U:
-                    cameraDescriptor.IncreaseZXAngle();
+                case Key.A:
+                    isUserInputDetected = true;
+                    carRotation += rotationSpeed;
+                    UpdateCarDirection(false);
                     break;
                 case Key.D:
-                    cameraDescriptor.DecreaseZXAngle();
+                    isUserInputDetected = true;
+                    carRotation -= rotationSpeed;
+                    UpdateCarDirection(true);
                     break;
+            }
+        }
+
+        private static void UpdateCarDirection(bool direction)
+        {
+            if (direction)
+            {
+                carDirection = new Vector3D<float>(
+                MathF.Sin(MathHelper.DegreesToRadians(carRotation)),
+                0,
+                MathF.Cos(MathHelper.DegreesToRadians(carRotation))
+                );
+            }
+            else
+            {
+                carDirection = new Vector3D<float>(
+                MathF.Cos(MathHelper.DegreesToRadians(-carRotation)),
+                0,
+                MathF.Sin(MathHelper.DegreesToRadians(-carRotation))
+                );
+            }
+            
+        }
+
+        private static void UpdateCamera()
+        {
+            if (isUserInputDetected)
+            {
+                cameraDescriptor.Target = carPosition;
+
+                var cameraPosition = cameraDescriptor.Position;
+                var cameraTarget = cameraDescriptor.Target;
+                var upVector = cameraDescriptor.UpVector;
+
+                var viewMatrix = Matrix4X4.CreateLookAt(cameraPosition, cameraTarget, upVector);
+
+                SetViewMatrix(viewMatrix);
+                isUserInputDetected = false;
             }
         }
 
         private static void Window_Update(double deltaTime)
         {
-            //Console.WriteLine($"Update after {deltaTime} [s].");
-            // multithreaded
-            // make sure it is threadsafe
-            // NO GL calls
-            if (roadPoints.Count > 1)
+            if (isUserInputDetected)
             {
-                progressOnSegment += carSpeed * (float)deltaTime;
-
-                Vector3D<float> startPoint = roadPoints[currentRoadSegment];
-                Vector3D<float> endPoint = roadPoints[(currentRoadSegment + 1) % roadPoints.Count];
-                Vector3D<float> direction = endPoint - startPoint;
-                float segmentLength = direction.Length;
-
-                /*if (progressOnSegment >= segmentLength)
-                {
-                    progressOnSegment = 0f;
-                    currentRoadSegment = (currentRoadSegment + 1) % roadPoints.Count;
-                }
-                else
-                {
-                    float t = progressOnSegment / segmentLength;
-                    carPosition = startPoint + direction * t;
-
-                    carDirection = Vector3D.Normalize(direction);
-                    carRotation = MathF.Atan2(carDirection.X, carDirection.Z);
-                }*/
+                UpdateCamera();
+                //UpdateCarDirection();
             }
 
             controller.Update((float)deltaTime);
@@ -335,7 +467,14 @@ namespace Szeminarium1_24_02_17_2
 
             Gl.UseProgram(program);
 
-            SetViewMatrix();
+            Vector3D<float> forward = Vector3D.Normalize(carDirection);
+            Vector3D<float> up = new Vector3D<float>(0f, 1f, 0f);
+            float distanceBack = 10f;
+            float heightUp = 3f;
+            Vector3D<float> cameraPosition = carPosition + new Vector3D<float>(0f, heightUp, -distanceBack);
+            var viewMatrix = Matrix4X4.CreateLookAt(cameraPosition, carPosition, up);
+
+            SetViewMatrix(viewMatrix);
             SetProjectionMatrix();
 
             SetLightColor();
@@ -426,10 +565,13 @@ namespace Szeminarium1_24_02_17_2
             // set material uniform to rubber
             var modelMatrix = Matrix4X4<float>.Identity;
 
-            modelMatrix *= Matrix4X4.CreateTranslation(carPosition);
-            modelMatrix *= Matrix4X4.CreateRotationY(carRotation);
-            modelMatrix *= Matrix4X4.CreateScale(1f);
+            var rotationMatrix = Matrix4X4.CreateRotationY(MathHelper.DegreesToRadians(carRotation));
+            var translationMatrix = Matrix4X4.CreateTranslation(carPosition);
+            modelMatrix = translationMatrix * rotationMatrix;
+
             SetModelMatrix(modelMatrix);
+
+            teapot = ObjResourceReader.CreateTeapotWithColor(Gl, face1Color);
 
             Gl.BindVertexArray(teapot.Vao);
             Gl.DrawElements(GLEnum.Triangles, teapot.IndexArrayLength, GLEnum.UnsignedInt, null);
@@ -475,7 +617,7 @@ namespace Szeminarium1_24_02_17_2
             float[] face5Color = [0.0f, 1.0f, 1.0f, 1.0f];
             float[] face6Color = [1.0f, 1.0f, 0.0f, 1.0f];
 
-            teapot = ObjResourceReader.CreateTeapotWithColor(Gl, face1Color);
+            //teapot = ObjResourceReader.CreateTeapotWithColor(Gl, face1Color);
             road = CreateRoadMesh();
 
             for (int i = 0; i < 10; i++)
@@ -588,31 +730,13 @@ namespace Szeminarium1_24_02_17_2
             CheckError();
         }
 
-        private static unsafe void SetViewMatrix()
+        private static unsafe void SetViewMatrix(Matrix4X4<float> viewMatrix)
         {
-            Vector3D<float> forward = Vector3D.Normalize(carDirection);
-            Vector3D<float> up = new Vector3D<float>(0f, 1f, 0f);
-            Vector3D<float> right = Vector3D.Normalize(Vector3D.Cross(forward, up));
+            Gl.UseProgram(program);
 
-            float distanceBack = 50f;
-            float heightUp = 3f;
+            int viewMatrixLocation = Gl.GetUniformLocation(program, ViewMatrixVariableName);
 
-            Vector3D<float> cameraOffset = -forward * distanceBack + up * heightUp;
-            Vector3D<float> cameraPosition = carPosition + cameraOffset;
-            Vector3D<float> cameraTarget = carPosition;
-
-            Console.WriteLine($"Camera position: {cameraPosition}, Target: {cameraTarget}, carPosition: {carPosition}, carDirection: {carDirection}");
-
-            var viewMatrix = Matrix4X4.CreateLookAt(cameraPosition, cameraTarget, up);
-            int location = Gl.GetUniformLocation(program, ViewMatrixVariableName);
-
-            if (location == -1)
-            {
-                throw new Exception($"{ViewMatrixVariableName} uniform not found on shader.");
-            }
-
-            Gl.UniformMatrix4(location, 1, false, (float*)&viewMatrix);
-            CheckError();
+            Gl.UniformMatrix4(viewMatrixLocation, 1, false, (float*)&viewMatrix);
         }
 
         public static void CheckError()
