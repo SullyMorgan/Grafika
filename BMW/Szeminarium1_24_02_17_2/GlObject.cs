@@ -1,68 +1,56 @@
 ﻿using Silk.NET.OpenGL;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Szeminarium1_24_02_17_2
 {
-    public class GlObject : IDisposable
+    internal class GlObject
     {
-        private readonly GL _gl;
-        public uint Vao { get; }
-        public uint Vbo { get; }
-        public uint Ebo { get; }
-        public uint IndexArrayLength { get; }
+        public GL Gl { get; }
+        public uint VAO { get; }
+        public uint VBO { get; }
+        public uint EBO { get; }
+        public uint IndexCount { get; }
+        public Dictionary<string, uint> MaterialRanges { get; set; }
 
-        public GlObject(GL gl, uint vao, uint vbo, uint ebo, uint indexArrayLength)
+        public GlObject(GL gl, uint vao, uint vbo, uint ebo, uint indexCount)
         {
-            _gl = gl;
-            Vao = vao;
-            Vbo = vbo;
-            Ebo = ebo;
-            IndexArrayLength = indexArrayLength;
+            Gl = gl;
+            VAO = vao;
+            VBO = vbo;
+            EBO = ebo;
+            IndexCount = indexCount;
+            MaterialRanges = new Dictionary<string, uint>();
         }
 
-        public static unsafe GlObject Create(GL gl, float[] vertices, uint[] indices)
+        public unsafe void Draw()
         {
-            uint vao = gl.GenVertexArray();
-            gl.BindVertexArray(vao);
-
-            uint vbo = gl.GenBuffer();
-            gl.BindBuffer(GLEnum.ArrayBuffer, vbo);
-            fixed (float* v = &vertices[0])
-            {
-                gl.BufferData(GLEnum.ArrayBuffer, (nuint)(vertices.Length * sizeof(float)), v, GLEnum.StaticDraw);
-            }
-
-            uint ebo = gl.GenBuffer();
-            gl.BindBuffer(GLEnum.ElementArrayBuffer, ebo);
-            fixed (uint* i = &indices[0])
-            {
-                gl.BufferData(GLEnum.ElementArrayBuffer, (nuint)(indices.Length * sizeof(uint)), i, GLEnum.StaticDraw);
-            }
-
-            gl.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, 9 * sizeof(float), (void*)0);
-            gl.EnableVertexAttribArray(0);
-
-            gl.VertexAttribPointer(1, 4, VertexAttribPointerType.Float, false, 9 * sizeof(float), (void*)(3 * sizeof(float)));
-            gl.EnableVertexAttribArray(1);
-
-            gl.VertexAttribPointer(2, 3, VertexAttribPointerType.Float, false, 9 * sizeof(float), (void*)(7 * sizeof(float)));
-            gl.EnableVertexAttribArray(2);
-
-            gl.BindVertexArray(0); // Unbind the VAO
-
-            return new GlObject(gl, vao, vbo, ebo, (uint)indices.Length);
+            Gl.BindVertexArray(VAO);
+            Gl.DrawElements(PrimitiveType.Triangles, IndexCount, DrawElementsType.UnsignedInt, null);
         }
 
         public void ReleaseGlObject()
         {
-            _gl.DeleteVertexArray(Vao);
-            _gl.DeleteBuffer(Vbo);
-            _gl.DeleteBuffer(Ebo);
+            Gl.DeleteVertexArray(VAO);
+            Gl.DeleteBuffer(VBO);
+            Gl.DeleteBuffer(EBO);
         }
 
-        public void Dispose()
+        public unsafe void DrawWithMaterials()
         {
-            ReleaseGlObject();
-            GC.SuppressFinalize(this);
+            Gl.BindVertexArray(VAO);
+            var materialList = MaterialRanges.ToList();
+
+            for (int i = 0; i < materialList.Count; i++)
+            {
+                var current = materialList[i];
+                uint start = current.Value;
+                uint end = (i == materialList.Count - 1) ?
+                    IndexCount : materialList[i + 1].Value;
+                uint count = end - start;
+
+                Gl.DrawElements(PrimitiveType.Triangles, count, DrawElementsType.UnsignedInt, (void*)(start * sizeof(uint)));
+            }
         }
     }
 }

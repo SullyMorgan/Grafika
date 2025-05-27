@@ -9,12 +9,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Resources\bmw.mtl" />
+    <None Remove="Resources\bmw.obj" />
+    <None Remove="Resources\car.mtl" />
+    <None Remove="Resources\car.obj" />
     <None Remove="Resources\lamp.obj" />
     <None Remove="Resources\minicooper.obj" />
     <None Remove="Resources\teapot.obj" />
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\bmw.mtl" />
+    <EmbeddedResource Include="Resources\bmw.obj" />
+    <EmbeddedResource Include="Resources\car.mtl" />
+    <EmbeddedResource Include="Resources\car.obj" />
     <EmbeddedResource Include="Resources\lamp.obj" />
     <EmbeddedResource Include="Resources\teapot.obj" />
   </ItemGroup>
