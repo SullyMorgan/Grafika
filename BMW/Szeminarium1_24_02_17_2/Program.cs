@@ -5,6 +5,7 @@ using Silk.NET.OpenGL;
 using Silk.NET.OpenGL.Extensions.ImGui;
 using Silk.NET.Vulkan;
 using Silk.NET.Windowing;
+using System.Numerics;
 
 namespace Szeminarium1_24_02_17_2
 {
@@ -188,11 +189,15 @@ namespace Szeminarium1_24_02_17_2
                 "Szeminarium1_24_02_17_2.Resources.car.mtl"
                 );
 
-            Gl.ClearColor(System.Drawing.Color.Black);
+            if (car == null)
+            {
+                throw new Exception("Failed to create car object from OBJ file.");
+            }
 
-            Gl.Enable(EnableCap.CullFace);
-
+            Gl.ClearColor(System.Drawing.Color.White);
             Gl.Enable(EnableCap.DepthTest);
+            Gl.FrontFace(GLEnum.CW);
+            
             Gl.DepthFunc(DepthFunction.Lequal);
             CheckError("ha a load vegen is van error beleverem a faszomat");
         }
@@ -322,11 +327,12 @@ namespace Szeminarium1_24_02_17_2
 
         private static void Window_Update(double deltaTime)
         {
-            //CheckError("window update megszop");
+            CheckError("window update megszop");
             while (Gl.GetError() != GLEnum.NoError) { }
             if (isUserInputDetected)
             {
                 UpdateCamera();
+                Console.WriteLine("User input detected");
                 //UpdateCarDirection();
             }
 
@@ -340,32 +346,24 @@ namespace Szeminarium1_24_02_17_2
             // GL here
             while (Gl.GetError() != GLEnum.NoError) { }
             controller.Update((float)deltaTime);
-            Console.WriteLine("Rendering frame...");
             Gl.Clear(ClearBufferMask.ColorBufferBit);
             Gl.Clear(ClearBufferMask.DepthBufferBit);
 
 
-            //Gl.UseProgram(program);
-            Console.WriteLine("Using shader program...");
+            Gl.UseProgram(program);
 
             if (program == 0)
             {
                 Console.WriteLine("Shader program is 0! Ez baj lesz");
             }
 
-            Vector3D<float> forward = Vector3D.Normalize(carDirection);
             Vector3D<float> up = new Vector3D<float>(0f, 1f, 0f);
-            float distanceBack = 10f;
-            float heightUp = 3f;
-            Vector3D<float> cameraPosition = carPosition + new Vector3D<float>(0f, heightUp, -distanceBack);
-            CheckError("after cameraPosition calculation");
-            var viewMatrix = Matrix4X4.CreateLookAt(cameraPosition, carPosition, up);
-            
-            Console.WriteLine("View matrix set.");
+            Vector3D<float> cameraPosition = carPosition - carDirection * 10f + new Vector3D<float>(0f, 5f, 0f);
+            Vector3D<float> cameraTarget = carPosition;
+            var viewMatrix = Matrix4X4.CreateLookAt(cameraPosition, cameraTarget, up);
 
-            CheckError("B4 SetViewMatrix in Window_Render()");
             SetViewMatrix(viewMatrix);
-            CheckError("After SetViewMatrix in Window_Render()");
+            
             SetProjectionMatrix();
 
             SetLightColor();
@@ -374,6 +372,8 @@ namespace Szeminarium1_24_02_17_2
             SetShininess();
 
             DrawCar();
+            SetModelMatrix(Matrix4X4<float>.Identity);
+            //car.DrawWithMaterials();
             Console.WriteLine("Car drawn.");
 
             //ImGuiNET.ImGui.ShowDemoWindow();
@@ -381,7 +381,6 @@ namespace Szeminarium1_24_02_17_2
                 ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoTitleBar);
             ImGuiNET.ImGui.SliderFloat("Shininess", ref Shininess, 1, 200);
             ImGuiNET.ImGui.End();
-
 
             controller.Render();
             Console.WriteLine("ImGui rendered.");
@@ -452,7 +451,6 @@ namespace Szeminarium1_24_02_17_2
             modelMatrix = translationMatrix * rotationMatrix;
 
             SetModelMatrix(modelMatrix);
-
             car.DrawWithMaterials();
         }
 

@@ -9,6 +9,7 @@ namespace Szeminarium1_24_02_17_2
     {
         public static unsafe GlObject CreateFromObjWithMaterials(GL gl, string objResourcePath, string mtlResourcePath)
         {
+            Console.WriteLine($"SZOPIIIIII: {objResourcePath}, {mtlResourcePath}");
             uint vao = gl.GenVertexArray();
             gl.BindVertexArray(vao);
 
@@ -21,7 +22,7 @@ namespace Szeminarium1_24_02_17_2
             // Create interleaved buffer
             List<float> interleavedData = new List<float>();
             List<uint> indices = new List<uint>();
-            Dictionary<string, uint> materialRanges = new Dictionary<string, uint>();
+            Dictionary<string, List<(uint Start, uint Count)>> materialRanges = new Dictionary<string, List<(uint, uint)>>();
 
             CreateInterleavedDataWithMaterials(materials, objData, interleavedData, indices, materialRanges);
 
@@ -66,8 +67,10 @@ namespace Szeminarium1_24_02_17_2
             ObjData objData,
             List<float> interleavedData,
             List<uint> indices,
-            Dictionary<string, uint> materialRanges)
+            Dictionary<string, List<(uint Start, uint Count)>> materialRanges)
         {
+            // debug
+            Console.WriteLine($"Creating interleaved data for {objData.Faces.Count} faces with materials...");
             Dictionary<string, uint> vertexCache = new Dictionary<string, uint>();
             uint currentIndex = 0;
             string currentMaterial = null;
@@ -82,21 +85,37 @@ namespace Szeminarium1_24_02_17_2
                 {
                     if (currentMaterial != null)
                     {
-                        materialRanges[currentMaterial] = materialStartIndex;
+                        uint count = (uint)(indices.Count - (int)materialStartIndex);
+                        if (count > 0)
+                        {
+                            if (!materialRanges.ContainsKey(currentMaterial))
+                            {
+                                materialRanges[currentMaterial] = new List<(uint, uint)>();
+                            }
+                            materialRanges[currentMaterial].Add((materialStartIndex, count));
+                        }
                     }
+
                     currentMaterial = faceMaterial;
                     materialStartIndex = (uint)indices.Count;
                 }
-
-                // Process face vertices
                 ProcessFaceVertices(materials, objData, faceIndex, interleavedData, indices, vertexCache, ref currentIndex, faceMaterial);
-            }
 
-            // Add the last material range
-            if (currentMaterial != null)
-            {
-                materialRanges[currentMaterial] = materialStartIndex;
+                // Add the last material range
+                if (currentMaterial != null)
+                {
+                    uint count = (uint)(indices.Count - (int)materialStartIndex);
+                    if (count > 0)
+                    {
+                        if (!materialRanges.ContainsKey(currentMaterial))
+                        {
+                            materialRanges[currentMaterial] = new List<(uint, uint)>();
+                        }
+                        materialRanges[currentMaterial].Add((materialStartIndex, count));
+                    }
+                }
             }
+            Console.WriteLine($"Total vertices: {interleavedData.Count / 9}, Total indices: {indices.Count}");
         }
 
         private static void ProcessFaceVertices(
@@ -174,6 +193,7 @@ namespace Szeminarium1_24_02_17_2
 
         private static ObjData ReadObjDataWithMaterials(string resourcePath)
         {
+            Console.WriteLine("ReadObjDataWithMaterials");
             var objData = new ObjData();
             string currentMaterial = null;
 
@@ -231,25 +251,57 @@ namespace Szeminarium1_24_02_17_2
 
         private static void ProcessFace(string[] parts, ObjData objData, string currentMaterial)
         {
-            var vertexIndices = new int[3];
-            var normalIndices = new int[3];
+            int faceVertexCount = parts.Length - 1;
+            List<int> vertexIndices = new List<int>();
+            List<int> normalIndices = new List<int>();
             bool normalsFound = false;
 
-            for (int i = 1; i <= 3; i++)
+            for (int i = 1; i <= parts.Length - 1; i++)
             {
                 var tokens = parts[i].Split('/');
-                vertexIndices[i - 1] = int.Parse(tokens[0]);
+                int vertexIndex = int.Parse(tokens[0]);
+                vertexIndices.Add(vertexIndex);
 
                 if (tokens.Length >= 3 && !string.IsNullOrWhiteSpace(tokens[2]))
                 {
-                    normalIndices[i - 1] = int.Parse(tokens[2]);
+                    int normalIndex = int.Parse(tokens[2]);
+                    normalIndices.Add(normalIndex);
                     normalsFound = true;
+                }
+                else
+                {
+                    normalIndices.Add(-1);
                 }
             }
 
-            objData.Faces.Add(vertexIndices);
-            objData.NormalIndices.Add(normalsFound ? normalIndices : null);
-            objData.FaceMaterials.Add(currentMaterial ?? "default");
+            for (int i = 0; i < faceVertexCount - 2; i++)
+            {
+                int[] triangleVertices = new int[]
+                {
+                    vertexIndices[0],
+                    vertexIndices[i + 1],
+                    vertexIndices[i + 2]
+                };
+                objData.Faces.Add(triangleVertices);
+
+                if (normalsFound)
+                {
+                    int[] triangleNormals = new int[]
+                    {
+                        normalIndices[0],
+                        normalIndices[i + 1],
+                        normalIndices[i + 2]
+                    };
+                    objData.NormalIndices.Add(triangleNormals);
+                }
+                else
+                {
+                    objData.NormalIndices.Add(null);
+                }
+
+                objData.FaceMaterials.Add(currentMaterial);
+            }
+
             objData.HasNormals |= normalsFound;
         }
 

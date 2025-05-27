@@ -11,7 +11,7 @@ namespace Szeminarium1_24_02_17_2
         public uint VBO { get; }
         public uint EBO { get; }
         public uint IndexCount { get; }
-        public Dictionary<string, uint> MaterialRanges { get; set; }
+        public Dictionary<string, List<(uint Start, uint Count)>> MaterialRanges { get; set; }
 
         public GlObject(GL gl, uint vao, uint vbo, uint ebo, uint indexCount)
         {
@@ -20,7 +20,7 @@ namespace Szeminarium1_24_02_17_2
             VBO = vbo;
             EBO = ebo;
             IndexCount = indexCount;
-            MaterialRanges = new Dictionary<string, uint>();
+            MaterialRanges = new Dictionary<string, List<(uint, uint)>>();
         }
 
         public unsafe void Draw()
@@ -38,18 +38,24 @@ namespace Szeminarium1_24_02_17_2
 
         public unsafe void DrawWithMaterials()
         {
+            Console.WriteLine("DrawWithMaterials");
             Gl.BindVertexArray(VAO);
-            var materialList = MaterialRanges.ToList();
 
-            for (int i = 0; i < materialList.Count; i++)
+            foreach (var materialEntry in MaterialRanges)
             {
-                var current = materialList[i];
-                uint start = current.Value;
-                uint end = (i == materialList.Count - 1) ?
-                    IndexCount : materialList[i + 1].Value;
-                uint count = end - start;
-
-                Gl.DrawElements(PrimitiveType.Triangles, count, DrawElementsType.UnsignedInt, (void*)(start * sizeof(uint)));
+                string materialName = materialEntry.Key;
+                Console.WriteLine($"Material name: {materialName}");
+                Console.WriteLine("SZOPOS GECI BANDAK");
+                foreach (var range in materialEntry.Value)
+                {
+                    //Console.WriteLine($"Start: {range.Start}, Count: {range.Count}");
+                    Gl.DrawElements(
+                        PrimitiveType.Triangles,
+                        range.Count,
+                        DrawElementsType.UnsignedInt,
+                        (void*)(range.Start * sizeof(uint))
+                        );
+                }
             }
         }
     }
