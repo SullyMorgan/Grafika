@@ -6,6 +6,7 @@ using Silk.NET.OpenGL.Extensions.ImGui;
 using Silk.NET.Vulkan;
 using Silk.NET.Windowing;
 using System.Numerics;
+using StbImageSharp;
 
 namespace Szeminarium1_24_02_17_2
 {
@@ -25,10 +26,14 @@ namespace Szeminarium1_24_02_17_2
         private static uint program;
 
         private static GlObject? car;
+        private static GlObject? road;
+        private static uint roadVAO, roadVBO;
 
         private static Vector3D<float> carPosition = new Vector3D<float>(0f, 0f, 0f);
         private static Vector3D<float> carDirection = new Vector3D<float>(0f, 0f, 1f);
         private static float carRotation = 0f; // in radians
+
+        private static Matrix4X4<float> viewMatrix;
 
         private static float Shininess = 50;
 
@@ -38,6 +43,33 @@ namespace Szeminarium1_24_02_17_2
         private const string ProjectionMatrixVariableName = "projection";
 
         private static bool isUserInputDetected = false;
+
+        // skybox
+        private static readonly float[] SkyboxVertices =
+        {
+            -1000.0f,  1000.0f, -1000.0f,
+            -1000.0f, -1000.0f, -1000.0f,
+             1000.0f, -1000.0f, -1000.0f,
+             1000.0f,  1000.0f, -1000.0f,
+            -1000.0f, -1000.0f,  1000.0f,
+            -1000.0f,  1000.0f,  1000.0f,
+             1000.0f, -1000.0f,  1000.0f,
+             1000.0f,  1000.0f,  1000.0f
+        };
+
+        private static readonly uint[] SkyboxIndices = {
+            0, 1, 2, 2, 3, 0, // hátsó
+            4, 1, 0, 0, 5, 4, // bal
+            2, 6, 7, 7, 3, 2, // jobb
+            4, 5, 7, 7, 6, 4, // elülső
+            0, 3, 7, 7, 5, 0, // teteje
+            1, 4, 6, 6, 2, 1  // alja
+        };
+
+        private static uint skyboxVAO, skyboxVBO, skyboxEBO;
+        private static uint skyboxProgram;
+        private static uint cubemapTexture;
+        private static Matrix4X4<float> projectionMatrix;
 
         private static readonly string VertexShaderSource = @"
         #version 330 core
@@ -108,6 +140,37 @@ namespace Szeminarium1_24_02_17_2
         }
         ";
 
+        private static readonly string SkyboxVertexShaderSource = @"
+        #version 330 core
+        layout (location = 0) in vec3 aPos;
+
+        uniform mat4 projection;
+        uniform mat4 view;
+
+        out vec3 TexCoords;
+
+        void main()
+        {
+            TexCoords = aPos;
+            mat4 viewWithoutTranslation = mat4(mat3(view)); // Pozíció eltávolítása
+            vec4 pos = projection * viewWithoutTranslation * vec4(aPos, 1.0);
+            gl_Position = pos.xyww; // Z-t mindig 1.0-re állítja
+        }
+        ";
+
+        private static readonly string SkyboxFragmentShaderSource = @"
+        #version 330 core
+        in vec3 TexCoords;
+        out vec4 FragColor;
+
+        uniform samplerCube skybox;
+
+        void main()
+        {
+            FragColor = texture(skybox, TexCoords);
+        }
+        ";
+
         static void Main(string[] args)
         {
             WindowOptions windowOptions = WindowOptions.Default;
@@ -120,13 +183,9 @@ namespace Szeminarium1_24_02_17_2
             window = Window.Create(windowOptions);
 
             window.Load += Window_Load;
-            Console.WriteLine("Window_Load lefutott.");
             window.Update += Window_Update;
-            Console.WriteLine("Window_Upadte lefutott.");
             window.Render += Window_Render;
-            Console.WriteLine("Window_Render lefutott.");
             window.Closing += Window_Closing;
-            Console.WriteLine("Window_Closing lefutott.");
 
             window.Run();
         }
@@ -154,7 +213,6 @@ namespace Szeminarium1_24_02_17_2
             else
             {
                 Console.WriteLine("OpenGL initialized successfully");
-                Console.WriteLine($"GL version: {Gl.GetStringS(StringName.Version)}");
             }
             inputContext = window.CreateInput();
             if (inputContext == null)
@@ -167,7 +225,6 @@ namespace Szeminarium1_24_02_17_2
             }
             CheckError("ha a loadban is van error beleverem a faszomat");
             controller = new ImGuiController(Gl, window, inputContext);
-            Console.WriteLine("ImGui controller created.");
 
             LinkProgram();
             Gl.UseProgram(program);
@@ -194,10 +251,29 @@ namespace Szeminarium1_24_02_17_2
                 throw new Exception("Failed to create car object from OBJ file.");
             }
 
+            CreateRoad(Gl);
+
+            CreateSkybox(Gl);
+            CreateSkyboxShader();
+
+            string[] faces = {
+                "right.jpg",
+                "left.jpg",
+                "top.jpg",
+                "bottom.jpg",
+                "front.jpg",
+                "back.jpg"
+            };
+
+            cubemapTexture = LoadCubemap(faces);
+
+            UpdateCamera();
+            SetViewMatrix(viewMatrix);
+
             Gl.ClearColor(System.Drawing.Color.White);
             Gl.Enable(EnableCap.DepthTest);
             Gl.FrontFace(GLEnum.CW);
-            
+
             Gl.DepthFunc(DepthFunction.Lequal);
             CheckError("ha a load vegen is van error beleverem a faszomat");
         }
@@ -220,9 +296,118 @@ namespace Szeminarium1_24_02_17_2
             Gl.Uniform1(locShine, material.Shininess);
         }
 
+        private static unsafe uint LoadCubemap(string[] faces)
+        {
+            uint textureID = Gl.GenTexture();
+            Gl.BindTexture(GLEnum.TextureCubeMap, textureID);
+
+            int skyboxLoc = Gl.GetUniformLocation(skyboxProgram, "skybox");
+            if (skyboxLoc == -1)
+            {
+                throw new Exception("skybox uniform not found on skybox shader.");
+            }
+
+            GLEnum[] targets = new GLEnum[]
+            {
+                GLEnum.TextureCubeMapPositiveX,
+                GLEnum.TextureCubeMapNegativeX,
+                GLEnum.TextureCubeMapPositiveY,
+                GLEnum.TextureCubeMapNegativeY,
+                GLEnum.TextureCubeMapPositiveZ,
+                GLEnum.TextureCubeMapNegativeZ
+            };
+
+            for (uint i = 0; i < faces.Length; i++)
+            {
+                string filePath = Path.Combine("Resources", "skybox", faces[i]);
+                var img = ImageResult.FromStream(File.OpenRead(filePath), ColorComponents.RedGreenBlueAlpha);
+
+                fixed (byte* data = img.Data)
+                {
+                    Gl.TexImage2D(
+                        targets[i],
+                        0,
+                        (int)GLEnum.Rgba,
+                        (uint)img.Width,
+                        (uint)img.Height,
+                        0,
+                        GLEnum.Rgba,
+                        GLEnum.UnsignedByte,
+                        data
+                        );
+                }
+            }
+
+            Gl.TexParameter(GLEnum.TextureCubeMap, GLEnum.TextureMinFilter, (int)GLEnum.Linear);
+            Gl.TexParameter(GLEnum.TextureCubeMap, GLEnum.TextureMagFilter, (int)GLEnum.Linear);
+            Gl.TexParameter(GLEnum.TextureCubeMap, GLEnum.TextureWrapS, (int)GLEnum.ClampToEdge);
+            Gl.TexParameter(GLEnum.TextureCubeMap, GLEnum.TextureWrapT, (int)GLEnum.ClampToEdge);
+            Gl.TexParameter(GLEnum.TextureCubeMap, GLEnum.TextureWrapR, (int)GLEnum.ClampToEdge);
+
+            return textureID;
+        }
+
+        private static unsafe void CreateSkybox(GL gl)
+        {
+            skyboxVAO = gl.GenVertexArray();
+            skyboxVBO = gl.GenBuffer();
+            skyboxEBO = gl.GenBuffer();
+
+            gl.BindVertexArray(skyboxVAO);
+
+            gl.BindBuffer(GLEnum.ArrayBuffer, skyboxVBO);
+            fixed (float* v = SkyboxVertices)
+            {
+                gl.BufferData(
+                    GLEnum.ArrayBuffer,
+                    (nuint)(SkyboxVertices.Length * sizeof(float)),
+                    v,
+                    GLEnum.StaticDraw
+                    );
+            }
+
+            gl.BindBuffer(GLEnum.ElementArrayBuffer, skyboxEBO);
+            fixed (uint* i = SkyboxIndices)
+            {
+                gl.BufferData(
+                    GLEnum.ElementArrayBuffer,
+                    (nuint)(SkyboxIndices.Length * sizeof(uint)),
+                    i,
+                    GLEnum.StaticDraw
+                    );
+            }
+
+            gl.VertexAttribPointer(0, 3, GLEnum.Float, false, 3 * sizeof(float), (void*)0);
+            gl.EnableVertexAttribArray(0);
+            gl.BindVertexArray(0);
+        }
+
+        private static void CreateSkyboxShader()
+        {
+            uint vshader = Gl.CreateShader(ShaderType.VertexShader);
+            Gl.ShaderSource(vshader, SkyboxVertexShaderSource);
+            Gl.CompileShader(vshader);
+            CheckShaderError(vshader);
+
+            uint fshader = Gl.CreateShader(ShaderType.FragmentShader);
+            Gl.ShaderSource(fshader, SkyboxFragmentShaderSource);
+            Gl.CompileShader(fshader);
+            CheckShaderError(fshader);
+
+            skyboxProgram = Gl.CreateProgram();
+            Gl.AttachShader(skyboxProgram, vshader);
+            Gl.AttachShader(skyboxProgram, fshader);
+            Gl.LinkProgram(skyboxProgram);
+            CheckProgramLink(skyboxProgram);
+
+            Gl.DetachShader(skyboxProgram, vshader);
+            Gl.DetachShader(skyboxProgram, fshader);
+            Gl.DeleteShader(vshader);
+            Gl.DeleteShader(fshader);
+        }
+
         private static void LinkProgram()
         {
-            Console.WriteLine("Linking shaders...");
             uint vshader = Gl.CreateShader(ShaderType.VertexShader);
             uint fshader = Gl.CreateShader(ShaderType.FragmentShader);
 
@@ -238,7 +423,7 @@ namespace Szeminarium1_24_02_17_2
             if (fStatus != (int)GLEnum.True)
                 throw new Exception("Fragment shader failed to compile: " + Gl.GetShaderInfoLog(fshader));
 
-            
+
             program = Gl.CreateProgram();
             Gl.AttachShader(program, vshader);
             Gl.AttachShader(program, fshader);
@@ -248,7 +433,6 @@ namespace Szeminarium1_24_02_17_2
             {
                 throw new Exception($"Error linking shader {Gl.GetProgramInfoLog(program)}");
             }
-            Console.WriteLine("Shaders compiled successfully.");
             Gl.DetachShader(program, vshader);
             Gl.DetachShader(program, fshader);
             Gl.DeleteShader(vshader);
@@ -259,84 +443,75 @@ namespace Szeminarium1_24_02_17_2
         {
             const float moveSpeed = 1.0f;
             const float rotationSpeed = 5.0f;
+
             switch (key)
             {
                 case Key.W:
                     isUserInputDetected = true;
-                    carPosition += carDirection * moveSpeed;
+                    {
+                        var direction = new Vector3D<float>(
+                            MathF.Sin(carRotation),
+                            0f,
+                            MathF.Cos(carRotation)
+                            );
+                        carPosition += Vector3D.Normalize(carDirection) * moveSpeed;
+                        UpdateCamera();
+                    }
                     break;
                     ;
                 case Key.S:
                     isUserInputDetected = true;
-                    carPosition -= carDirection * moveSpeed;
+                    {
+                        var direction = new Vector3D<float>(
+                            MathF.Sin(carRotation),
+                            0f,
+                            MathF.Sin(carRotation)
+                            );
+                        carPosition -= Vector3D.Normalize(carDirection) * moveSpeed;
+                        UpdateCamera();
+                    }
                     break;
                 case Key.A:
                     isUserInputDetected = true;
-                    carRotation += rotationSpeed;
-                    UpdateCarDirection(false);
+                    carRotation += MathHelper.DegreesToRadians(rotationSpeed);
+                    UpdateCarDirection();
+                    UpdateCamera();
                     break;
                 case Key.D:
                     isUserInputDetected = true;
-                    carRotation -= rotationSpeed;
-                    UpdateCarDirection(true);
+                    carRotation -= MathHelper.DegreesToRadians(rotationSpeed);
+                    UpdateCarDirection();
+                    UpdateCamera();
                     break;
             }
         }
-
-        private static void UpdateCarDirection(bool direction)
+        private static void UpdateCarDirection()
         {
-            if (direction)
-            {
-                carDirection = new Vector3D<float>(
-                MathF.Sin(MathHelper.DegreesToRadians(carRotation)),
-                0,
-                MathF.Cos(MathHelper.DegreesToRadians(carRotation))
+            carDirection = new Vector3D<float>(
+                MathF.Sin(carRotation),
+                0f,
+                MathF.Cos(carRotation)
                 );
-            }
-            else
-            {
-                carDirection = new Vector3D<float>(
-                MathF.Cos(MathHelper.DegreesToRadians(-carRotation)),
-                0,
-                MathF.Sin(MathHelper.DegreesToRadians(-carRotation))
-                );
-            }
+            Console.WriteLine($"carRotation: {carRotation}, carDirection: {carDirection}");
 
+            carDirection = Vector3D.Normalize(carDirection);
         }
 
         private static void UpdateCamera()
         {
-            if (isUserInputDetected)
-            {
-                cameraDescriptor.Target = carPosition;
+            Vector3D<float> cameraOffset = new Vector3D<float>(0f, 5f, 10f);
+            Vector3D<float> cameraPosition = carPosition - carDirection * cameraOffset.Z + new Vector3D<float>(0f, cameraOffset.Y, 0f);
 
-                var cameraPosition = cameraDescriptor.Position;
-                var cameraTarget = cameraDescriptor.Target;
-                var upVector = cameraDescriptor.UpVector;
+            Vector3D<float> cameraTarget = carPosition + carDirection * 2f;
+            Vector3D<float> up = new Vector3D<float>(0f, 1f, 0f);
 
-                var viewMatrix = Matrix4X4.CreateLookAt(cameraPosition, cameraTarget, upVector);
-
-                Console.WriteLine($"Camera position: {cameraPosition}, cameraTarget: {cameraTarget}, upVector: {upVector}");
-
-                CheckError("B4 SetViewMatrix");
-                SetViewMatrix(viewMatrix);
-                CheckError("After SetViewMatrix");
-                isUserInputDetected = false;
-            }
+            viewMatrix = Matrix4X4.CreateLookAt(cameraPosition, cameraTarget, up);
+            SetViewMatrix(viewMatrix);
         }
 
         private static void Window_Update(double deltaTime)
         {
-            CheckError("window update megszop");
-            while (Gl.GetError() != GLEnum.NoError) { }
-            if (isUserInputDetected)
-            {
-                UpdateCamera();
-                Console.WriteLine("User input detected");
-                //UpdateCarDirection();
-            }
-
-            //controller.Update((float)deltaTime);
+            //UpdateCamera();
         }
 
         private static unsafe void Window_Render(double deltaTime)
@@ -349,7 +524,7 @@ namespace Szeminarium1_24_02_17_2
             Gl.Clear(ClearBufferMask.ColorBufferBit);
             Gl.Clear(ClearBufferMask.DepthBufferBit);
 
-
+            CheckError("Checkerror a renderben");
             Gl.UseProgram(program);
 
             if (program == 0)
@@ -357,13 +532,10 @@ namespace Szeminarium1_24_02_17_2
                 Console.WriteLine("Shader program is 0! Ez baj lesz");
             }
 
-            Vector3D<float> up = new Vector3D<float>(0f, 1f, 0f);
-            Vector3D<float> cameraPosition = carPosition - carDirection * 10f + new Vector3D<float>(0f, 5f, 0f);
-            Vector3D<float> cameraTarget = carPosition;
-            var viewMatrix = Matrix4X4.CreateLookAt(cameraPosition, cameraTarget, up);
-
+            CheckError("setviewmatrix elott renderben");
+            UpdateCamera();
             SetViewMatrix(viewMatrix);
-            
+
             SetProjectionMatrix();
 
             SetLightColor();
@@ -375,6 +547,42 @@ namespace Szeminarium1_24_02_17_2
             SetModelMatrix(Matrix4X4<float>.Identity);
             //car.DrawWithMaterials();
             Console.WriteLine("Car drawn.");
+
+            Gl.UseProgram(program);
+            SetModelMatrix(Matrix4X4<float>.Identity);
+            Gl.BindVertexArray(roadVAO);
+            Gl.DrawElements(GLEnum.Triangles, 6, GLEnum.UnsignedInt, (void*)0);
+            Gl.BindVertexArray(0);
+
+            Gl.DepthFunc(GLEnum.Lequal); // Módosítjuk a mélységtesztet
+
+            Gl.UseProgram(skyboxProgram);
+            var viewWithoutTranslation = new Matrix4X4<float>(
+                viewMatrix.M11, viewMatrix.M12, viewMatrix.M13, 0,
+                viewMatrix.M21, viewMatrix.M22, viewMatrix.M23, 0,
+                viewMatrix.M31, viewMatrix.M32, viewMatrix.M33, 0,
+                0, 0, 0, 1
+            );
+            //SetViewMatrix(viewMatrix);
+            SetShaderMatrix(skyboxProgram, "view", viewWithoutTranslation);
+            float fov = MathF.PI / 4f;
+            float aspectRatio = (float)window.Size.X / window.Size.Y;
+            float near = 0.1f;
+            float far = 2000.0f;
+            var localProjectionMatrix = Matrix4X4.CreatePerspectiveFieldOfView(fov, aspectRatio, near, far);
+
+            SetShaderMatrix(skyboxProgram, "projection", localProjectionMatrix);
+
+            Gl.BindVertexArray(skyboxVAO);
+            Gl.ActiveTexture(GLEnum.Texture0);
+            Gl.BindTexture(GLEnum.TextureCubeMap, cubemapTexture);
+            Gl.Uniform1(Gl.GetUniformLocation(skyboxProgram, "skybox"), 0);
+            Gl.DrawElements(GLEnum.Triangles, 36, GLEnum.UnsignedInt, (void*)0);
+            Gl.BindVertexArray(0);
+
+            CheckError("Skybox csinalasa utan a renderben");
+
+            Gl.DepthFunc(GLEnum.Less);
 
             //ImGuiNET.ImGui.ShowDemoWindow();
             ImGuiNET.ImGui.Begin("Lighting properties",
@@ -388,7 +596,6 @@ namespace Szeminarium1_24_02_17_2
 
         private static unsafe void SetLightColor()
         {
-            Console.WriteLine("Setting light color...");
             int location = Gl.GetUniformLocation(program, LightColorVariableName);
 
             if (location == -1)
@@ -402,7 +609,6 @@ namespace Szeminarium1_24_02_17_2
 
         private static unsafe void SetLightPosition()
         {
-            Console.WriteLine("Setting light position...");
             int location = Gl.GetUniformLocation(program, LightPositionVariableName);
 
             if (location == -1)
@@ -416,7 +622,6 @@ namespace Szeminarium1_24_02_17_2
 
         private static unsafe void SetViewerPosition()
         {
-            Console.WriteLine("Setting viewer position...");
             int location = Gl.GetUniformLocation(program, ViewPosVariableName);
 
             if (location == -1)
@@ -444,14 +649,68 @@ namespace Szeminarium1_24_02_17_2
         private static unsafe void DrawCar()
         {
             // set material uniform to rubber
-            var modelMatrix = Matrix4X4<float>.Identity;
-
-            var rotationMatrix = Matrix4X4.CreateRotationY(MathHelper.DegreesToRadians(carRotation));
-            var translationMatrix = Matrix4X4.CreateTranslation(carPosition);
-            modelMatrix = translationMatrix * rotationMatrix;
+            var baseRotation = Matrix4X4.CreateRotationY(MathF.PI * 2);
+            var currentRotation = Matrix4X4.CreateRotationY(carRotation);
+            var translation = Matrix4X4.CreateTranslation(carPosition);
+            var modelMatrix = translation * currentRotation * baseRotation;
 
             SetModelMatrix(modelMatrix);
             car.DrawWithMaterials();
+        }
+
+        private static unsafe void CreateRoad(GL gl)
+        {
+            float[] roadVertices =
+            {
+                -25.0f, -0.1f, -25.0f,  0.3f, 0.3f, 0.3f, // Bal hátsó sarok
+                 25.0f, -0.1f, -25.0f,  0.3f, 0.3f, 0.3f, // Jobb hátsó sarok
+                 25.0f, -0.1f,  25.0f,  0.3f, 0.3f, 0.3f, // Jobb elősarok
+                -25.0f, -0.1f,  25.0f,  0.3f, 0.3f, 0.3f  // Bal elősarok
+            };
+
+            uint[] roadIndices =
+            {
+                0, 1, 2,
+                2, 3, 0
+            };
+
+            roadVAO = gl.GenVertexArray();
+            roadVBO = gl.GenBuffer();
+            uint roadEBO = gl.GenBuffer();
+
+            gl.BindVertexArray(roadVAO);
+
+            // ==== VBO (Vertex Buffer) ====
+            gl.BindBuffer(GLEnum.ArrayBuffer, roadVBO);
+            fixed (float* roadVerticesPtr = roadVertices)
+            {
+                gl.BufferData(
+                    GLEnum.ArrayBuffer,
+                    (nuint)(roadVertices.Length * sizeof(float)),
+                    roadVerticesPtr,
+                    GLEnum.StaticDraw
+                );
+            }
+
+            // ==== EBO (Element Buffer) ====
+            gl.BindBuffer(GLEnum.ElementArrayBuffer, roadEBO);
+            fixed (uint* roadIndicesPtr = roadIndices)
+            {
+                gl.BufferData(
+                    GLEnum.ElementArrayBuffer,
+                    (nuint)(roadIndices.Length * sizeof(uint)),
+                    roadIndicesPtr,
+                    GLEnum.StaticDraw
+                );
+            }
+
+            // ==== Attribútumok ====
+            gl.VertexAttribPointer(0, 3, GLEnum.Float, false, 6 * sizeof(float), (void*)0);
+            gl.EnableVertexAttribArray(0);
+            gl.VertexAttribPointer(1, 3, GLEnum.Float, false, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+            gl.EnableVertexAttribArray(1);
+
+            gl.BindVertexArray(0);
         }
 
         private static unsafe void SetModelMatrix(Matrix4X4<float> modelMatrix)
@@ -487,9 +746,23 @@ namespace Szeminarium1_24_02_17_2
             CheckError("SetModelMatrix2");
         }
 
+        private static unsafe void SetShaderMatrix(uint program, string name, Matrix4X4<float> matrix)
+        {
+            int location = Gl.GetUniformLocation(program, name);
+            if (location != -1)
+            {
+                Gl.UniformMatrix4(location, 1, false, (float*)&matrix);
+            }
+        }
+
         private static void Window_Closing()
         {
             car.ReleaseGlObject();
+            Gl.DeleteVertexArray(skyboxVAO);
+            Gl.DeleteBuffer(skyboxVBO);
+            Gl.DeleteBuffer(skyboxEBO);
+            Gl.DeleteProgram(skyboxProgram);
+            Gl.DeleteTexture(cubemapTexture);
         }
 
         private static unsafe void SetProjectionMatrix()
@@ -513,7 +786,8 @@ namespace Szeminarium1_24_02_17_2
 
         private static unsafe void SetViewMatrix(Matrix4X4<float> viewMatrix)
         {
-            Console.WriteLine("Checking whats in SetViewMatrix()");
+            Gl.UseProgram(program);
+            CheckError("SetViewMatrix eleje");
             int viewMatrixLocation = Gl.GetUniformLocation(program, ViewMatrixVariableName);
 
             if (viewMatrixLocation == -1)
@@ -533,6 +807,26 @@ namespace Szeminarium1_24_02_17_2
             {
                 Console.WriteLine($"OpenGL error in {context}: {error}");
                 throw new Exception($"OpenGL error in {context}: {error}");
+            }
+        }
+
+        private static void CheckShaderError(uint shader)
+        {
+            Gl.GetShader(shader, ShaderParameterName.CompileStatus, out int status);
+            if (status != (int)GLEnum.True)
+            {
+                string infoLog = Gl.GetShaderInfoLog(shader);
+                throw new Exception($"Shader compilation failed: {infoLog}");
+            }
+        }
+
+        private static void CheckProgramLink(uint program)
+        {
+            Gl.GetProgram(program, GLEnum.LinkStatus, out int status);
+            if (status == 0)
+            {
+                string infoLog = Gl.GetProgramInfoLog(program);
+                throw new Exception($"Shader program linking failed: {infoLog}");
             }
         }
     }

@@ -15,7 +15,38 @@
     <None Remove="Resources\car.obj" />
     <None Remove="Resources\lamp.obj" />
     <None Remove="Resources\minicooper.obj" />
+    <None Remove="Resources\skybox\back.jpg" />
+    <None Remove="Resources\skybox\bottom.jpg" />
+    <None Remove="Resources\skybox\front.jpg" />
+    <None Remove="Resources\skybox\left.jpg" />
+    <None Remove="Resources\skybox\right.jpg" />
+    <None Remove="Resources\skybox\sky.jpg" />
+    <None Remove="Resources\skybox\top.jpg" />
     <None Remove="Resources\teapot.obj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Resources\skybox\back.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\skybox\bottom.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\skybox\front.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\skybox\left.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\skybox\right.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\skybox\sky.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\skybox\top.jpg">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
@@ -30,6 +61,7 @@
   <ItemGroup>
     <PackageReference Include="Silk.NET" Version="2.20.0" />
     <PackageReference Include="Silk.NET.OpenGL.Extensions.ImGui" Version="2.20.0" />
+    <PackageReference Include="StbImageSharp" Version="2.30.15" />
   </ItemGroup>
 
 </Project>

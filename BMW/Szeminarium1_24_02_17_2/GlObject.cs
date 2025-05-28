@@ -38,14 +38,11 @@ namespace Szeminarium1_24_02_17_2
 
         public unsafe void DrawWithMaterials()
         {
-            Console.WriteLine("DrawWithMaterials");
             Gl.BindVertexArray(VAO);
 
             foreach (var materialEntry in MaterialRanges)
             {
                 string materialName = materialEntry.Key;
-                Console.WriteLine($"Material name: {materialName}");
-                Console.WriteLine("SZOPOS GECI BANDAK");
                 foreach (var range in materialEntry.Value)
                 {
                     //Console.WriteLine($"Start: {range.Start}, Count: {range.Count}");
