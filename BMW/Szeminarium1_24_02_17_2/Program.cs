@@ -73,6 +73,15 @@ namespace Szeminarium1_24_02_17_2
         private static uint cubemapTexture;
         private static Matrix4X4<float> projectionMatrix;
 
+        // kontrolok
+        private static bool isWPressed = false;
+        private static bool isSPressed = false;
+        private static bool isAPressed = false;
+        private static bool isDPressed = false;
+
+        private static float continuousMoveSpeed = 5.0f;
+        private static float continuousRotationSpeedDegrees = 90.0f;
+
         private static readonly string VertexShaderSource = @"
         #version 330 core
         layout (location = 0) in vec3 aPos;
@@ -233,6 +242,7 @@ namespace Szeminarium1_24_02_17_2
             foreach (var keyboard in inputContext.Keyboards)
             {
                 keyboard.KeyDown += Keyboard_KeyDown;
+                keyboard.KeyUp += Keyboard_KeyUp;
             }
 
             // Handle resizes
@@ -443,68 +453,46 @@ namespace Szeminarium1_24_02_17_2
 
         private static void Keyboard_KeyDown(IKeyboard keyboard, Key key, int arg3)
         {
-            const float moveSpeed = 1.0f;
-            const float rotationSpeed = 5.0f;
-
-            Console.WriteLine($"\n=== Key pressed: {key} ===");
-            Console.WriteLine($"BEFORE - carPosition: {carPosition}");
-            Console.WriteLine($"BEFORE - carRotation: {carRotation}");
-            Console.WriteLine($"BEFORE - carDirection: {carDirection}");
+            isUserInputDetected = true;
 
             switch (key)
             {
                 case Key.W:
-                    isUserInputDetected = true;
-                    /*{
-                        var direction = new Vector3D<float>(
-                            MathF.Sin(carRotation),
-                            0f,
-                            MathF.Cos(carRotation)
-                            );
-                        carPosition += Vector3D.Normalize(direction) * moveSpeed;
-                        UpdateCamera();
-                    }*/
-                    carPosition += carDirection * moveSpeed;
-                    Console.WriteLine($"Action: Moving forward: carRotation: {carRotation}");
-                    UpdateCamera();
+                    isWPressed = true;
                     break;
-                    ;
                 case Key.S:
-                    /*isUserInputDetected = true;
-                    {
-                        var direction = new Vector3D<float>(
-                            MathF.Sin(carRotation),
-                            0f,
-                            MathF.Cos(carRotation)
-                            );
-                        carPosition -= Vector3D.Normalize(direction) * moveSpeed;
-                        UpdateCamera();
-                    }*/
-                    isUserInputDetected = true;
-                    carPosition -= carDirection * moveSpeed;
-                    Console.WriteLine($"Action: Moving backward: carRotation: {carRotation}");
-                    UpdateCamera();
+                    isSPressed = true;
                     break;
                 case Key.A:
-                    isUserInputDetected = true;
-                    carRotation += MathHelper.DegreesToRadians(rotationSpeed);
-                    Console.WriteLine($"Action: turning left: carRotation: {carRotation}");
-                    UpdateCarDirection();
-                    UpdateCamera();
+                    isAPressed = true;
                     break;
                 case Key.D:
-                    isUserInputDetected = true;
-                    carRotation -= MathHelper.DegreesToRadians(rotationSpeed);
-                    Console.WriteLine($"Action: turning right: carRotation: {carRotation}");
-                    UpdateCarDirection();
-                    UpdateCamera();
+                    isDPressed = true;
                     break;
             }
-            Console.WriteLine($"AFTER - carPosition: {carPosition}");
-            Console.WriteLine($"AFTER - carRotation: {carRotation}");
-            Console.WriteLine($"AFTER - carDirection: {carDirection}");
-            Console.WriteLine("========================\n");
         }
+
+        private static void Keyboard_KeyUp(IKeyboard keyboard, Key key, int arg3)
+        {
+            isUserInputDetected = false;
+
+            switch (key)
+            {
+                case Key.W:
+                    isWPressed = false;
+                    break;
+                case Key.S:
+                    isSPressed = false;
+                    break;
+                case Key.A:
+                    isAPressed = false;
+                    break;
+                case Key.D:
+                    isDPressed = false;
+                    break;
+            }
+        }
+
         private static void UpdateCarDirection()
         {
             carDirection = new Vector3D<float>(
@@ -547,7 +535,41 @@ namespace Szeminarium1_24_02_17_2
 
         private static void Window_Update(double deltaTime)
         {
-            //UpdateCamera();
+            bool carStateChanged = false;
+            float dt = (float)deltaTime;
+
+            if (isAPressed)
+            {
+                carRotation += MathHelper.DegreesToRadians(continuousRotationSpeedDegrees * dt);
+                carStateChanged = true;
+            }
+            if (isDPressed)
+            {
+                carRotation -= MathHelper.DegreesToRadians(continuousRotationSpeedDegrees * dt);
+                carStateChanged = true;
+            }
+
+            if (isAPressed || isDPressed)
+            {
+                UpdateCarDirection();
+            }
+
+            if (isWPressed)
+            {
+                carPosition += carDirection * continuousMoveSpeed * dt;
+                carStateChanged = true;
+            }
+
+            if (isSPressed)
+            {
+                carPosition -= carDirection * continuousMoveSpeed * dt;
+                carStateChanged = true;
+            }
+
+            if (carStateChanged)
+            {
+                UpdateCamera();
+            }
         }
 
         private static unsafe void Window_Render(double deltaTime)
