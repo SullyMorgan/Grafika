@@ -7,13 +7,13 @@ using Silk.NET.Vulkan;
 using Silk.NET.Windowing;
 using System.Numerics;
 using StbImageSharp;
+using Silk.NET.Core.Attributes;
 
 namespace Szeminarium1_24_02_17_2
 {
     internal static class Program
     {
         private static CameraDescriptor cameraDescriptor = new();
-
 
         private static IWindow? window;
 
@@ -60,12 +60,12 @@ namespace Szeminarium1_24_02_17_2
         };
 
         private static readonly uint[] SkyboxIndices = {
-            0, 1, 2, 2, 3, 0, // hátsó
-            4, 1, 0, 0, 5, 4, // bal
-            2, 6, 7, 7, 3, 2, // jobb
-            4, 5, 7, 7, 6, 4, // elülső
-            0, 3, 7, 7, 5, 0, // teteje
-            1, 4, 6, 6, 2, 1  // alja
+            0, 1, 2, 2, 3, 0,
+            4, 1, 0, 0, 5, 4,
+            2, 6, 7, 7, 3, 2,
+            4, 5, 7, 7, 6, 4,
+            0, 3, 7, 7, 5, 0,
+            1, 4, 6, 6, 2, 1
         };
 
         private static uint skyboxVAO, skyboxVBO, skyboxEBO;
@@ -79,8 +79,15 @@ namespace Szeminarium1_24_02_17_2
         private static bool isAPressed = false;
         private static bool isDPressed = false;
 
-        private static float continuousMoveSpeed = 5.0f;
+        private static float continuousMoveSpeed = 30.0f;
         private static float continuousRotationSpeedDegrees = 90.0f;
+
+        // uj ut
+        private static List<Vector3D<float>> roadCenterline = new List<Vector3D<float>>();
+        private static float roadWidth = 30.0f;
+        private static uint roadIndicesCount = 0;
+        private static float roadSurfaceYOffset = -1f;
+        private static float offRoadTolerance = 1.0f;
 
         private static readonly string VertexShaderSource = @"
         #version 330 core
@@ -263,18 +270,55 @@ namespace Szeminarium1_24_02_17_2
                 throw new Exception("Failed to create car object from OBJ file.");
             }
 
+            roadCenterline.Add(new Vector3D<float>(0, 0, -150));     // Start messzebb hátul
+
+            // Első egyenes szakasz
+            roadCenterline.Add(new Vector3D<float>(0, 0, 50));       // Hosszú egyenes előre
+
+            // Első kanyar (enyhe jobbos)
+            roadCenterline.Add(new Vector3D<float>(20, 0, 100));
+            roadCenterline.Add(new Vector3D<float>(50, 0, 130));
+            roadCenterline.Add(new Vector3D<float>(90, 0, 150));
+
+            // Második egyenes szakasz
+            roadCenterline.Add(new Vector3D<float>(200, 0, 150));    // Hosszú egyenes oldalra
+
+            // S kanyar
+            roadCenterline.Add(new Vector3D<float>(250, 0, 130));    // Jobbra le
+            roadCenterline.Add(new Vector3D<float>(280, 0, 100));
+            roadCenterline.Add(new Vector3D<float>(280, 0, 50));     // Egyenes lefelé
+            roadCenterline.Add(new Vector3D<float>(250, 0, 20));     // Balra fel
+            roadCenterline.Add(new Vector3D<float>(200, 0, 0));
+
+            // Harmadik egyenes szakasz visszafelé
+            roadCenterline.Add(new Vector3D<float>(100, 0, 0));
+            roadCenterline.Add(new Vector3D<float>(50, 0, -20));     // Enyhe kanyar
+
+            // Utolsó szakasz a cél felé
+            roadCenterline.Add(new Vector3D<float>(50, 0, -180));    // Hosszú egyenes a célhoz
+            roadCenterline.Add(new Vector3D<float>(40, 0, -220));
+
+            if (roadCenterline.Count > 0)
+            {
+                carPosition = roadCenterline[0];
+                if (roadCenterline.Count > 1)
+                {
+                    carDirection = Vector3D.Normalize(roadCenterline[1] - roadCenterline[0]);
+                    carRotation = MathF.Atan2(carDirection.X, carDirection.Z);
+                }
+            }
             CreateRoad(Gl);
 
             CreateSkybox(Gl);
             CreateSkyboxShader();
 
             string[] faces = {
-                "right.jpg",
-                "left.jpg",
-                "top.jpg",
-                "bottom.jpg",
-                "front.jpg",
-                "back.jpg"
+            "right.jpg",
+            "left.jpg",
+            "top.jpg",
+            "bottom.jpg",
+            "front.jpg",
+            "back.jpg"
             };
 
             cubemapTexture = LoadCubemap(faces);
@@ -500,34 +544,22 @@ namespace Szeminarium1_24_02_17_2
                 0f,
                 MathF.Cos(carRotation)
                 );
-            Console.WriteLine($"CARROTATION: {carRotation}, CARDIRECTION: {carDirection}");
+            //Console.WriteLine($"CARROTATION: {carRotation}, CARDIRECTION: {carDirection}");
 
-            //carDirection = Vector3D.Normalize(carDirection);
+            carDirection = Vector3D.Normalize(carDirection);
         }
 
         private static void UpdateCamera()
         {
             Vector3D<float> cameraOffset = new Vector3D<float>(0f, 5f, 15f);
 
-            // Számítsd ki a kamera pozíciót
             Vector3D<float> calculatedCameraPosition = carPosition - carDirection * cameraOffset.Z + new Vector3D<float>(0f, cameraOffset.Y, 0f);
 
-            // Tárold el a kiszámított pozíciót a currentCameraPosition változóban
             currentCameraPosition = calculatedCameraPosition;
 
             Vector3D<float> cameraTarget = carPosition;
             Vector3D<float> up = new Vector3D<float>(0f, 1f, 0f);
 
-            Console.WriteLine("=== UpdateCamera ===");
-            Console.WriteLine($"carPosition: {carPosition}");
-            Console.WriteLine($"carDirection: {carDirection}");
-            Console.WriteLine($"carRotation: {carRotation}");
-            Console.WriteLine($"calculatedCameraPosition: {calculatedCameraPosition}"); // Kiszámoljuk
-            Console.WriteLine($"currentCameraPosition (stored): {currentCameraPosition}"); // Eltároljuk
-            Console.WriteLine($"cameraTarget: {cameraTarget}");
-            Console.WriteLine("==================");
-
-            // Használd a KISZÁMÍTOTT pozíciót a view matrixhoz
             viewMatrix = Matrix4X4.CreateLookAt(calculatedCameraPosition, cameraTarget, up);
             SetViewMatrix(viewMatrix);
         }
@@ -569,6 +601,24 @@ namespace Szeminarium1_24_02_17_2
             if (carStateChanged)
             {
                 UpdateCamera();
+
+                if (IsCarOffRoad())
+                {
+                    Console.WriteLine("Vesztettel! Leestel az utrol!");
+                    window.Close();
+                    return;
+                }
+            }
+
+            if (roadCenterline.Count > 0)
+            {
+                Vector3D<float> targetPoint = roadCenterline[roadCenterline.Count - 1];
+                float distanceToTarget = Vector3D.Distance(carPosition, targetPoint);
+                if (distanceToTarget < 5.0f)
+                {
+                    Console.WriteLine("Gratulalok! Nyertel!");
+                    window.Close();
+                }
             }
         }
 
@@ -603,7 +653,7 @@ namespace Szeminarium1_24_02_17_2
             Gl.UseProgram(program);
             SetModelMatrix(Matrix4X4<float>.Identity);
             Gl.BindVertexArray(roadVAO);
-            Gl.DrawElements(GLEnum.Triangles, 6, GLEnum.UnsignedInt, (void*)0);
+            Gl.DrawElements(GLEnum.Triangles, roadIndicesCount, GLEnum.UnsignedInt, (void*)0);
             Gl.BindVertexArray(0);
 
             Gl.DepthFunc(GLEnum.Lequal); // Módosítjuk a mélységtesztet
@@ -684,7 +734,7 @@ namespace Szeminarium1_24_02_17_2
 
             // Használd a currentCameraPosition változót a viewPos uniformhoz
             Gl.Uniform3(location, currentCameraPosition.X, currentCameraPosition.Y, currentCameraPosition.Z);
-            Console.WriteLine($"SetViewerPosition called with: {currentCameraPosition}");
+            //Console.WriteLine($"SetViewerPosition called with: {currentCameraPosition}");
             CheckError("SetViewerPosition");
         }
 
@@ -714,22 +764,65 @@ namespace Szeminarium1_24_02_17_2
             car.DrawWithMaterials();
         }
 
-
         private static unsafe void CreateRoad(GL gl)
         {
-            float[] roadVertices =
-            {
-                -100.0f, -0.1f, -100.0f,  0.3f, 0.3f, 0.3f, // Bal hátsó sarok
-                 100.0f, -0.1f, -100.0f,  0.3f, 0.3f, 0.3f, // Jobb hátsó sarok
-                 100.0f, -0.1f,  100.0f,  0.3f, 0.3f, 0.3f, // Jobb elősarok
-                -100.0f, -0.1f,  100.0f,  0.3f, 0.3f, 0.3f  // Bal elősarok
-            };
+            List<float> vertices = new List<float>();
+            List<uint> indices = new List<uint>();
+            uint vertexCounter = 0;
 
-            uint[] roadIndices =
+            Vector3D<float> finishLineColor = new Vector3D<float>(1f, 1f, 1f);
+            Vector3D<float> roadColor = new Vector3D<float>(0.3f, 0.3f, 0.3f);
+            Vector3D<float> roadNormal = new Vector3D<float>(0f, 1f, 0f);
+
+            Vector3D<float> p_start = roadCenterline[0];
+            Vector3D<float> p_next_for_start_dir = roadCenterline[1];
+            Vector3D<float> start_direction = Vector3D.Normalize(p_next_for_start_dir - p_start);
+            Vector3D<float> start_perp_right = Vector3D.Normalize(new Vector3D<float>(start_direction.Z, 0, -start_direction.X));
+
+            Vector3D<float> p0_left_xz = p_start - start_perp_right * (roadWidth / 2.0f);
+            Vector3D<float> p0_right_xz = p_start + start_perp_right * (roadWidth / 2.0f);
+
+            vertices.AddRange(new float[] { p0_left_xz.X, p_start.Y + roadSurfaceYOffset, p0_left_xz.Z, roadNormal.X, roadNormal.Y, roadNormal.Z, roadColor.X, roadColor.Y, roadColor.Z });
+            vertices.AddRange(new float[] { p0_right_xz.X, p_start.Y + roadSurfaceYOffset, p0_right_xz.Z, roadNormal.X, roadNormal.Y, roadNormal.Z, roadColor.X, roadColor.Y, roadColor.Z });
+            vertexCounter += 2;
+
+            // szegmensek letrehozasa
+            for (int i = 0; i < roadCenterline.Count - 1; i++)
             {
-                0, 1, 2,
-                2, 3, 0
-            };
+                Vector3D<float> p1 = roadCenterline[i]; // p1 Y szintje adja az aktuális szegmens alap Y-ját
+                Vector3D<float> p2_centerline = roadCenterline[i + 1]; // p2 Y szintje adja a következő pont alap Y-ját
+
+                Vector3D<float> direction = Vector3D.Normalize(p2_centerline - roadCenterline[i]);
+                if (direction.LengthSquared < 0.001f) continue;
+
+                Vector3D<float> perpendicularRight = Vector3D.Normalize(new Vector3D<float>(direction.Z, 0, -direction.X));
+
+                Vector3D<float> p2_left_xz = p2_centerline - perpendicularRight * (roadWidth / 2.0f);
+                Vector3D<float> p2_right_xz = p2_centerline + perpendicularRight * (roadWidth / 2.0f);
+
+                Vector3D<float> currentSegmentColor;
+                if (i == roadCenterline.Count - 2)
+                {
+                    currentSegmentColor = finishLineColor;
+                }
+                else
+                {
+                    currentSegmentColor = roadColor;
+                }
+
+                vertices.AddRange(new float[] { p2_left_xz.X, p2_centerline.Y + roadSurfaceYOffset, p2_left_xz.Z, roadNormal.X, roadNormal.Y, roadNormal.Z, currentSegmentColor.X, currentSegmentColor.Y, currentSegmentColor.Z });
+                vertices.AddRange(new float[] { p2_right_xz.X, p2_centerline.Y + roadSurfaceYOffset, p2_right_xz.Z, roadNormal.X, roadNormal.Y, roadNormal.Z, currentSegmentColor.X, currentSegmentColor.Y, currentSegmentColor.Z });
+
+                indices.Add(vertexCounter - 2);
+                indices.Add(vertexCounter - 1);
+                indices.Add(vertexCounter);
+
+                indices.Add(vertexCounter - 1);
+                indices.Add(vertexCounter + 1);
+                indices.Add(vertexCounter);
+
+                vertexCounter += 2;
+            }
 
             roadVAO = gl.GenVertexArray();
             roadVBO = gl.GenBuffer();
@@ -737,37 +830,98 @@ namespace Szeminarium1_24_02_17_2
 
             gl.BindVertexArray(roadVAO);
 
-            // ==== VBO (Vertex Buffer) ====
+            float[] roadVerticesArray = vertices.ToArray();
+            uint[] roadIndicesArray = indices.ToArray();
+            roadIndicesCount = (uint)roadIndicesArray.Length;
+
             gl.BindBuffer(GLEnum.ArrayBuffer, roadVBO);
-            fixed (float* roadVerticesPtr = roadVertices)
+            fixed (float* roadVerticesPtr = roadVerticesArray)
             {
                 gl.BufferData(
                     GLEnum.ArrayBuffer,
-                    (nuint)(roadVertices.Length * sizeof(float)),
+                    (nuint)(roadVerticesArray.Length * sizeof(float)),
                     roadVerticesPtr,
                     GLEnum.StaticDraw
                 );
             }
 
-            // ==== EBO (Element Buffer) ====
             gl.BindBuffer(GLEnum.ElementArrayBuffer, roadEBO);
-            fixed (uint* roadIndicesPtr = roadIndices)
+            fixed (uint* roadIndicesPtr = roadIndicesArray)
             {
                 gl.BufferData(
                     GLEnum.ElementArrayBuffer,
-                    (nuint)(roadIndices.Length * sizeof(uint)),
+                    (nuint)(roadIndicesArray.Length * sizeof(uint)),
                     roadIndicesPtr,
                     GLEnum.StaticDraw
                 );
             }
 
-            // ==== Attribútumok ====
-            gl.VertexAttribPointer(0, 3, GLEnum.Float, false, 6 * sizeof(float), (void*)0);
+            int stride = 9 * sizeof(float); // 3 pos, 3 normal, 3 color
+            gl.VertexAttribPointer(0, 3, GLEnum.Float, false, (uint)stride, (void*)0); // Position
             gl.EnableVertexAttribArray(0);
-            gl.VertexAttribPointer(1, 3, GLEnum.Float, false, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+            gl.VertexAttribPointer(1, 3, GLEnum.Float, false, (uint)stride, (void*)(3 * sizeof(float))); // Normal
             gl.EnableVertexAttribArray(1);
+            gl.VertexAttribPointer(2, 3, GLEnum.Float, false, (uint)stride, (void*)(6 * sizeof(float))); // Color
+            gl.EnableVertexAttribArray(2);
 
             gl.BindVertexArray(0);
+        }
+
+        private static bool IsCarOffRoad()
+        {
+            Vector2D<float> carPosXZ = new Vector2D<float>(carPosition.X, carPosition.Z);
+            float minDistanceToCenterLineSq = float.MaxValue;
+
+            for (int i = 0; i < roadCenterline.Count - 1; i++)
+            {
+                Vector3D<float> p1_3D = roadCenterline[i];
+                Vector3D<float> p2_3D = roadCenterline[i + 1];
+
+                Vector2D<float> p1 = new Vector2D<float>(p1_3D.X, p1_3D.Z);
+                Vector2D<float> p2 = new Vector2D<float>(p2_3D.X, p2_3D.Z);
+
+                Vector2D<float> segmentVec = p2 - p1;
+                Vector2D<float> carToP1 = carPosXZ - p1;
+
+                float segmentLengthSq = segmentVec.LengthSquared;
+
+                if (segmentLengthSq == 0)
+                {
+                    float distSq = carToP1.LengthSquared;
+                    if (distSq < minDistanceToCenterLineSq)
+                    {
+                        minDistanceToCenterLineSq = distSq;
+                    }
+                    continue;
+                }
+
+                float t = Vector2D.Dot(carToP1, segmentVec) / segmentLengthSq;
+
+                Vector2D<float> closestPointOnLine;
+                if (t < 0.0f)
+                {
+                    closestPointOnLine = p1;
+                }
+                else if (t > 1.0f)
+                {
+                    closestPointOnLine = p2;
+                }
+                else
+                {
+                    closestPointOnLine = p1 + t * segmentVec;
+                }
+
+                float distanceToClosestPointSq = Vector2D.DistanceSquared(carPosXZ, closestPointOnLine);
+                if (distanceToClosestPointSq < minDistanceToCenterLineSq)
+                {
+                    minDistanceToCenterLineSq = distanceToClosestPointSq;
+                }
+            }
+
+            float minDistance = MathF.Sqrt(minDistanceToCenterLineSq);
+            float maxAllowedDistance = (roadWidth / 2.0f) + offRoadTolerance;
+
+            return minDistance > maxAllowedDistance;
         }
 
         private static unsafe void SetModelMatrix(Matrix4X4<float> modelMatrix)
@@ -829,7 +983,7 @@ namespace Szeminarium1_24_02_17_2
                 throw new Exception("Window size is invalid.");
             }
             float aspectRatio = (float)window.Size.X / (float)window.Size.Y;
-            var projectionMatrix = Matrix4X4.CreatePerspectiveFieldOfView<float>((float)Math.PI / 4f, aspectRatio, 0.1f, 100);
+            var projectionMatrix = Matrix4X4.CreatePerspectiveFieldOfView<float>((float)Math.PI / 4f, aspectRatio, 0.1f, 2000);
             int location = Gl.GetUniformLocation(program, ProjectionMatrixVariableName);
 
             if (location == -1)
