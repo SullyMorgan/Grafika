@@ -9,7 +9,7 @@ namespace Szeminarium1_24_02_17_2
     {
         public static unsafe GlObject CreateFromObjWithMaterials(GL gl, string objResourcePath, string mtlResourcePath)
         {
-            Console.WriteLine($"SZOPIIIIII: {objResourcePath}, {mtlResourcePath}");
+            //Console.WriteLine($"SZOPIIIIII: {objResourcePath}, {mtlResourcePath}");
             uint vao = gl.GenVertexArray();
             gl.BindVertexArray(vao);
 
@@ -70,7 +70,7 @@ namespace Szeminarium1_24_02_17_2
             Dictionary<string, List<(uint Start, uint Count)>> materialRanges)
         {
             // debug
-            Console.WriteLine($"Creating interleaved data for {objData.Faces.Count} faces with materials...");
+            //Console.WriteLine($"Creating interleaved data for {objData.Faces.Count} faces with materials...");
             Dictionary<string, uint> vertexCache = new Dictionary<string, uint>();
             uint currentIndex = 0;
             string currentMaterial = null;
@@ -115,7 +115,7 @@ namespace Szeminarium1_24_02_17_2
                     }
                 }
             }
-            Console.WriteLine($"Total vertices: {interleavedData.Count / 9}, Total indices: {indices.Count}");
+            //Console.WriteLine($"Total vertices: {interleavedData.Count / 9}, Total indices: {indices.Count}");
         }
 
         private static void ProcessFaceVertices(
@@ -193,7 +193,7 @@ namespace Szeminarium1_24_02_17_2
 
         private static ObjData ReadObjDataWithMaterials(string resourcePath)
         {
-            Console.WriteLine("ReadObjDataWithMaterials");
+            //Console.WriteLine("ReadObjDataWithMaterials");
             var objData = new ObjData();
             string currentMaterial = null;
 

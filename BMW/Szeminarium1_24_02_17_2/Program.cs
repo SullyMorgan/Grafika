@@ -35,6 +35,8 @@ namespace Szeminarium1_24_02_17_2
 
         private static Matrix4X4<float> viewMatrix;
 
+        private static Vector3D<float> currentCameraPosition;
+
         private static float Shininess = 50;
 
         private const string ModelMatrixVariableName = "model";
@@ -203,7 +205,7 @@ namespace Szeminarium1_24_02_17_2
             //Console.WriteLine("Load");
 
             // set up input handling
-            Console.WriteLine("Initializing OpenGL...");
+            //Console.WriteLine("Initializing OpenGL...");
 
             Gl = window.CreateOpenGL();
             if (Gl == null)
@@ -212,7 +214,7 @@ namespace Szeminarium1_24_02_17_2
             }
             else
             {
-                Console.WriteLine("OpenGL initialized successfully");
+                //Console.WriteLine("OpenGL initialized successfully");
             }
             inputContext = window.CreateInput();
             if (inputContext == null)
@@ -221,7 +223,7 @@ namespace Szeminarium1_24_02_17_2
             }
             else
             {
-                Console.WriteLine("Input contex created.");
+                //Console.WriteLine("Input contex created.");
             }
             CheckError("ha a loadban is van error beleverem a faszomat");
             controller = new ImGuiController(Gl, window, inputContext);
@@ -444,46 +446,64 @@ namespace Szeminarium1_24_02_17_2
             const float moveSpeed = 1.0f;
             const float rotationSpeed = 5.0f;
 
+            Console.WriteLine($"\n=== Key pressed: {key} ===");
+            Console.WriteLine($"BEFORE - carPosition: {carPosition}");
+            Console.WriteLine($"BEFORE - carRotation: {carRotation}");
+            Console.WriteLine($"BEFORE - carDirection: {carDirection}");
+
             switch (key)
             {
                 case Key.W:
                     isUserInputDetected = true;
+                    /*{
+                        var direction = new Vector3D<float>(
+                            MathF.Sin(carRotation),
+                            0f,
+                            MathF.Cos(carRotation)
+                            );
+                        carPosition += Vector3D.Normalize(direction) * moveSpeed;
+                        UpdateCamera();
+                    }*/
+                    carPosition += carDirection * moveSpeed;
+                    Console.WriteLine($"Action: Moving forward: carRotation: {carRotation}");
+                    UpdateCamera();
+                    break;
+                    ;
+                case Key.S:
+                    /*isUserInputDetected = true;
                     {
                         var direction = new Vector3D<float>(
                             MathF.Sin(carRotation),
                             0f,
                             MathF.Cos(carRotation)
                             );
-                        carPosition += Vector3D.Normalize(carDirection) * moveSpeed;
+                        carPosition -= Vector3D.Normalize(direction) * moveSpeed;
                         UpdateCamera();
-                    }
-                    break;
-                    ;
-                case Key.S:
+                    }*/
                     isUserInputDetected = true;
-                    {
-                        var direction = new Vector3D<float>(
-                            MathF.Sin(carRotation),
-                            0f,
-                            MathF.Sin(carRotation)
-                            );
-                        carPosition -= Vector3D.Normalize(carDirection) * moveSpeed;
-                        UpdateCamera();
-                    }
+                    carPosition -= carDirection * moveSpeed;
+                    Console.WriteLine($"Action: Moving backward: carRotation: {carRotation}");
+                    UpdateCamera();
                     break;
                 case Key.A:
                     isUserInputDetected = true;
                     carRotation += MathHelper.DegreesToRadians(rotationSpeed);
+                    Console.WriteLine($"Action: turning left: carRotation: {carRotation}");
                     UpdateCarDirection();
                     UpdateCamera();
                     break;
                 case Key.D:
                     isUserInputDetected = true;
                     carRotation -= MathHelper.DegreesToRadians(rotationSpeed);
+                    Console.WriteLine($"Action: turning right: carRotation: {carRotation}");
                     UpdateCarDirection();
                     UpdateCamera();
                     break;
             }
+            Console.WriteLine($"AFTER - carPosition: {carPosition}");
+            Console.WriteLine($"AFTER - carRotation: {carRotation}");
+            Console.WriteLine($"AFTER - carDirection: {carDirection}");
+            Console.WriteLine("========================\n");
         }
         private static void UpdateCarDirection()
         {
@@ -492,22 +512,38 @@ namespace Szeminarium1_24_02_17_2
                 0f,
                 MathF.Cos(carRotation)
                 );
-            Console.WriteLine($"carRotation: {carRotation}, carDirection: {carDirection}");
+            Console.WriteLine($"CARROTATION: {carRotation}, CARDIRECTION: {carDirection}");
 
-            carDirection = Vector3D.Normalize(carDirection);
+            //carDirection = Vector3D.Normalize(carDirection);
         }
 
         private static void UpdateCamera()
         {
-            Vector3D<float> cameraOffset = new Vector3D<float>(0f, 5f, 10f);
-            Vector3D<float> cameraPosition = carPosition - carDirection * cameraOffset.Z + new Vector3D<float>(0f, cameraOffset.Y, 0f);
+            Vector3D<float> cameraOffset = new Vector3D<float>(0f, 5f, 15f);
 
-            Vector3D<float> cameraTarget = carPosition + carDirection * 2f;
+            // Számítsd ki a kamera pozíciót
+            Vector3D<float> calculatedCameraPosition = carPosition - carDirection * cameraOffset.Z + new Vector3D<float>(0f, cameraOffset.Y, 0f);
+
+            // Tárold el a kiszámított pozíciót a currentCameraPosition változóban
+            currentCameraPosition = calculatedCameraPosition;
+
+            Vector3D<float> cameraTarget = carPosition;
             Vector3D<float> up = new Vector3D<float>(0f, 1f, 0f);
 
-            viewMatrix = Matrix4X4.CreateLookAt(cameraPosition, cameraTarget, up);
+            Console.WriteLine("=== UpdateCamera ===");
+            Console.WriteLine($"carPosition: {carPosition}");
+            Console.WriteLine($"carDirection: {carDirection}");
+            Console.WriteLine($"carRotation: {carRotation}");
+            Console.WriteLine($"calculatedCameraPosition: {calculatedCameraPosition}"); // Kiszámoljuk
+            Console.WriteLine($"currentCameraPosition (stored): {currentCameraPosition}"); // Eltároljuk
+            Console.WriteLine($"cameraTarget: {cameraTarget}");
+            Console.WriteLine("==================");
+
+            // Használd a KISZÁMÍTOTT pozíciót a view matrixhoz
+            viewMatrix = Matrix4X4.CreateLookAt(calculatedCameraPosition, cameraTarget, up);
             SetViewMatrix(viewMatrix);
         }
+
 
         private static void Window_Update(double deltaTime)
         {
@@ -526,28 +562,22 @@ namespace Szeminarium1_24_02_17_2
 
             CheckError("Checkerror a renderben");
             Gl.UseProgram(program);
-
+             
             if (program == 0)
             {
                 Console.WriteLine("Shader program is 0! Ez baj lesz");
             }
 
-            CheckError("setviewmatrix elott renderben");
             UpdateCamera();
-            SetViewMatrix(viewMatrix);
 
             SetProjectionMatrix();
-
             SetLightColor();
             SetLightPosition();
             SetViewerPosition();
             SetShininess();
 
             DrawCar();
-            SetModelMatrix(Matrix4X4<float>.Identity);
-            //car.DrawWithMaterials();
-            Console.WriteLine("Car drawn.");
-
+            
             Gl.UseProgram(program);
             SetModelMatrix(Matrix4X4<float>.Identity);
             Gl.BindVertexArray(roadVAO);
@@ -563,7 +593,7 @@ namespace Szeminarium1_24_02_17_2
                 viewMatrix.M31, viewMatrix.M32, viewMatrix.M33, 0,
                 0, 0, 0, 1
             );
-            //SetViewMatrix(viewMatrix);
+            
             SetShaderMatrix(skyboxProgram, "view", viewWithoutTranslation);
             float fov = MathF.PI / 4f;
             float aspectRatio = (float)window.Size.X / window.Size.Y;
@@ -591,8 +621,9 @@ namespace Szeminarium1_24_02_17_2
             ImGuiNET.ImGui.End();
 
             controller.Render();
-            Console.WriteLine("ImGui rendered.");
+            //Console.WriteLine("ImGui rendered.");
         }
+
 
         private static unsafe void SetLightColor()
         {
@@ -629,9 +660,12 @@ namespace Szeminarium1_24_02_17_2
                 throw new Exception($"{ViewPosVariableName} uniform not found on shader.");
             }
 
-            Gl.Uniform3(location, cameraDescriptor.Position.X, cameraDescriptor.Position.Y, cameraDescriptor.Position.Z);
+            // Használd a currentCameraPosition változót a viewPos uniformhoz
+            Gl.Uniform3(location, currentCameraPosition.X, currentCameraPosition.Y, currentCameraPosition.Z);
+            Console.WriteLine($"SetViewerPosition called with: {currentCameraPosition}");
             CheckError("SetViewerPosition");
         }
+
 
         private static unsafe void SetShininess()
         {
@@ -648,24 +682,25 @@ namespace Szeminarium1_24_02_17_2
 
         private static unsafe void DrawCar()
         {
-            // set material uniform to rubber
-            var baseRotation = Matrix4X4.CreateRotationY(MathF.PI * 2);
+            //var baseRotation = Matrix4X4.CreateRotationY(MathF.PI);
             var currentRotation = Matrix4X4.CreateRotationY(carRotation);
             var translation = Matrix4X4.CreateTranslation(carPosition);
-            var modelMatrix = translation * currentRotation * baseRotation;
+            //var modelMatrix = translation * currentRotation;
+            var modelMatrix = currentRotation * translation;
 
             SetModelMatrix(modelMatrix);
             car.DrawWithMaterials();
         }
 
+
         private static unsafe void CreateRoad(GL gl)
         {
             float[] roadVertices =
             {
-                -25.0f, -0.1f, -25.0f,  0.3f, 0.3f, 0.3f, // Bal hátsó sarok
-                 25.0f, -0.1f, -25.0f,  0.3f, 0.3f, 0.3f, // Jobb hátsó sarok
-                 25.0f, -0.1f,  25.0f,  0.3f, 0.3f, 0.3f, // Jobb elősarok
-                -25.0f, -0.1f,  25.0f,  0.3f, 0.3f, 0.3f  // Bal elősarok
+                -100.0f, -0.1f, -100.0f,  0.3f, 0.3f, 0.3f, // Bal hátsó sarok
+                 100.0f, -0.1f, -100.0f,  0.3f, 0.3f, 0.3f, // Jobb hátsó sarok
+                 100.0f, -0.1f,  100.0f,  0.3f, 0.3f, 0.3f, // Jobb elősarok
+                -100.0f, -0.1f,  100.0f,  0.3f, 0.3f, 0.3f  // Bal elősarok
             };
 
             uint[] roadIndices =
@@ -722,8 +757,8 @@ namespace Szeminarium1_24_02_17_2
                 throw new Exception($"{ModelMatrixVariableName} uniform not found on shader.");
             }
 
-            Console.WriteLine($"Uniform location: {location}");
-            Console.WriteLine($"Model matrix: {modelMatrix}");
+            //Console.WriteLine($"Uniform location: {location}");
+            //Console.WriteLine($"Model matrix: {modelMatrix}");
 
             Gl.UniformMatrix4(location, 1, false, (float*)&modelMatrix);
             CheckError("SetModelMatrix1");
@@ -796,7 +831,7 @@ namespace Szeminarium1_24_02_17_2
             }
 
             Gl.UniformMatrix4(viewMatrixLocation, 1, false, (float*)&viewMatrix);
-            Console.WriteLine($"View matrix: {viewMatrix}");
+            //Console.WriteLine($"View matrix: {viewMatrix}");
             CheckError("SetViewMatrix");
         }
 

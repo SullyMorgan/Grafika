@@ -20,7 +20,7 @@ namespace Szeminarium1_24_02_17_2
         {
             get
             {
-                return GetPointFromAngles(DistanceToTarget, AngleToZYPlane, AngleToZXPlane);
+                return Target + GetPointFromAngles(DistanceToTarget, AngleToZYPlane, AngleToZXPlane);
             }
         }
 
@@ -72,6 +72,22 @@ namespace Szeminarium1_24_02_17_2
             var y = DistanceToTarget * Math.Sin(angleToMinZXPlane);
 
             return new Vector3D<float>((float)x, (float)y, (float)z);
+        }
+
+        public void SetCameraPosition(Vector3D<float> position, Vector3D<float> target)
+        {
+            this.Target = target;
+
+            Vector3D<float> direction = position - target;
+            DistanceToTarget = direction.Length;
+
+            if (DistanceToTarget > 0)
+            {
+                direction = Vector3D.Normalize(direction);
+
+                AngleToZYPlane = Math.Atan2(direction.X, direction.Z);
+                AngleToZXPlane = Math.Asin(direction.Y);
+            }
         }
     }
 }
