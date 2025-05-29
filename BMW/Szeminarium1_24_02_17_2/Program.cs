@@ -92,6 +92,15 @@ namespace Szeminarium1_24_02_17_2
         // kulonallo autok
         private static List<AiCar> aiCars = new List<AiCar>();
 
+        // kamera valtasok
+        private enum CameraMode
+        {
+            ThirdPerson,
+            FirstPerson
+        }
+        private static CameraMode currentCameraMode = CameraMode.ThirdPerson;
+        private static Vector3D<float> firstPersonOffset = new Vector3D<float>(0f, 0.8f, 1.5f);
+
         private static readonly string VertexShaderSource = @"
         #version 330 core
         layout (location = 0) in vec3 aPos;
@@ -332,19 +341,24 @@ namespace Szeminarium1_24_02_17_2
                     roadCenterline,
                     aiCarSpeed
                 );
-                newAiCar.CurrentPathIndex = startNodeIndex;
 
-                if (startNodeIndex < roadCenterline.Count)
+                newAiCar.Position = roadCenterline[startNodeIndex];
+                if (startNodeIndex + 1 < pathNodeCount)
                 {
-                    newAiCar.Position = roadCenterline[startNodeIndex];
-                    if (startNodeIndex + 1 < roadCenterline.Count)
-                    {
-                        newAiCar.Direction = Vector3D.Normalize(roadCenterline[startNodeIndex + 1] - roadCenterline[startNodeIndex]);
-                        newAiCar.Rotation = MathF.Atan2(newAiCar.Direction.X, newAiCar.Direction.Z);
-                    }
+                    newAiCar.Direction = Vector3D.Normalize(roadCenterline[startNodeIndex + 1] - roadCenterline[startNodeIndex]);
                 }
+                else if (startNodeIndex > 0)
+                {
+                    newAiCar.Direction = Vector3D.Normalize(roadCenterline[startNodeIndex] - roadCenterline[startNodeIndex - 1]);
+                }
+                else
+                {
+                    newAiCar.Direction = new Vector3D<float>(0, 0, 1);
+                }
+                newAiCar.Rotation = MathF.Atan2(newAiCar.Direction.X, newAiCar.Direction.Z);
+
                 aiCars.Add(newAiCar);
-                Console.WriteLine($"AI car {i} created, starting at path index {newAiCar.CurrentPathIndex} at position: {newAiCar.Position}");
+                Console.WriteLine($"AI car {i} created, starting at path index {startNodeIndex} at position: {newAiCar.Position}, direction: {newAiCar.Direction}, rotation: {newAiCar.Rotation}");
             }
 
             CreateSkybox(Gl);
@@ -551,6 +565,19 @@ namespace Szeminarium1_24_02_17_2
                 case Key.D:
                     isDPressed = true;
                     break;
+                case Key.V:
+                    if (currentCameraMode == CameraMode.ThirdPerson)
+                    {
+                        currentCameraMode = CameraMode.FirstPerson;
+                        Console.WriteLine("Camera mode: First Person");
+                    }
+                    else
+                    {
+                        currentCameraMode = CameraMode.ThirdPerson;
+                        Console.WriteLine("Camera mode: Third Person");
+                    }
+                    UpdateCamera();
+                    break;
             }
         }
 
@@ -589,16 +616,29 @@ namespace Szeminarium1_24_02_17_2
 
         private static void UpdateCamera()
         {
-            Vector3D<float> cameraOffset = new Vector3D<float>(0f, 5f, 15f);
-
-            Vector3D<float> calculatedCameraPosition = carPosition - carDirection * cameraOffset.Z + new Vector3D<float>(0f, cameraOffset.Y, 0f);
-
-            currentCameraPosition = calculatedCameraPosition;
-
-            Vector3D<float> cameraTarget = carPosition;
+            Vector3D<float> calculatedCameraPosition;
+            Vector3D<float> cameraTarget;
             Vector3D<float> up = new Vector3D<float>(0f, 1f, 0f);
 
-            viewMatrix = Matrix4X4.CreateLookAt(calculatedCameraPosition, cameraTarget, up);
+            if (currentCameraMode == CameraMode.ThirdPerson)
+            {
+                Vector3D<float> thirdPersonOffset = new Vector3D<float>(0f, 5f, 15f);
+                calculatedCameraPosition = carPosition - carDirection * thirdPersonOffset.Z + new Vector3D<float>(0f, thirdPersonOffset.Y, 0f);
+                cameraTarget = carPosition;
+            }
+            else
+            {
+                Matrix4X4<float> carRotationMatrix = Matrix4X4.CreateRotationY(carRotation);
+                Vector3D<float> localXAxis = Vector3D.Normalize(new Vector3D<float>(carDirection.Z, 0, -carDirection.X));
+                Vector3D<float> localYAxis = new Vector3D<float>(0, 1, 0);
+                Vector3D<float> localZAxis = carDirection;
+
+                calculatedCameraPosition = carPosition + localXAxis * firstPersonOffset.X + localYAxis * firstPersonOffset.Y + localZAxis * firstPersonOffset.Z;
+                cameraTarget = calculatedCameraPosition + carDirection * 10.0f;
+            }
+
+            currentCameraPosition = calculatedCameraPosition;
+            viewMatrix = Matrix4X4.CreateLookAt(currentCameraPosition, cameraTarget, up);
             SetViewMatrix(viewMatrix);
         }
 
