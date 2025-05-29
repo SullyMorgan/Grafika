@@ -89,6 +89,9 @@ namespace Szeminarium1_24_02_17_2
         private static float roadSurfaceYOffset = -1f;
         private static float offRoadTolerance = 1.0f;
 
+        // kulonallo autok
+        private static List<AiCar> aiCars = new List<AiCar>();
+
         private static readonly string VertexShaderSource = @"
         #version 330 core
         layout (location = 0) in vec3 aPos;
@@ -218,29 +221,18 @@ namespace Szeminarium1_24_02_17_2
 
         private static void Window_Load()
         {
-            //Console.WriteLine("Load");
-
-            // set up input handling
-            //Console.WriteLine("Initializing OpenGL...");
-
             Gl = window.CreateOpenGL();
             if (Gl == null)
             {
                 Console.WriteLine("Failed to initialize OpenGL");
             }
-            else
-            {
-                //Console.WriteLine("OpenGL initialized successfully");
-            }
+            
             inputContext = window.CreateInput();
             if (inputContext == null)
             {
                 Console.WriteLine("Failed to create input context");
             }
-            else
-            {
-                //Console.WriteLine("Input contex created.");
-            }
+
             CheckError("ha a loadban is van error beleverem a faszomat");
             controller = new ImGuiController(Gl, window, inputContext);
 
@@ -289,8 +281,6 @@ namespace Szeminarium1_24_02_17_2
             roadCenterline.Add(new Vector3D<float>(280, 0, 50));     // Egyenes lefelé
             roadCenterline.Add(new Vector3D<float>(250, 0, 20));     // Balra fel
             roadCenterline.Add(new Vector3D<float>(200, 0, 0));
-
-            // Harmadik egyenes szakasz visszafelé
             roadCenterline.Add(new Vector3D<float>(100, 0, 0));
             roadCenterline.Add(new Vector3D<float>(50, 0, -20));     // Enyhe kanyar
 
@@ -308,6 +298,54 @@ namespace Szeminarium1_24_02_17_2
                 }
             }
             CreateRoad(Gl);
+
+            int numberOfAiCars = 3;
+            float aiCarSpeed = 4.0f;
+            for (int i = 0; i < numberOfAiCars; i++)
+            {
+                GlObject aiCarModel = ObjResourceReader.CreateFromObjWithMaterials(
+                    Gl,
+                    "Szeminarium1_24_02_17_2.Resources.fiat.obj",
+                    "Szeminarium1_24_02_17_2.Resources.fiat.mtl"
+                    );
+                if (aiCarModel == null)
+                {
+                    throw new Exception("Failed to create AI car object from OBJ file.");
+                }
+
+                int pathNodeCount = roadCenterline.Count;
+                if (pathNodeCount < 2)
+                {
+                    continue;
+                }
+
+                int startNodeIndex = (i * (pathNodeCount / (numberOfAiCars + 1))) % pathNodeCount;
+
+                if (startNodeIndex >= pathNodeCount -1 && pathNodeCount > 1)
+                {
+                    startNodeIndex = pathNodeCount - 2;
+                }
+                if (startNodeIndex < 0) startNodeIndex = 0;
+
+                AiCar newAiCar = new AiCar(
+                    aiCarModel,
+                    roadCenterline,
+                    aiCarSpeed
+                );
+                newAiCar.CurrentPathIndex = startNodeIndex;
+
+                if (startNodeIndex < roadCenterline.Count)
+                {
+                    newAiCar.Position = roadCenterline[startNodeIndex];
+                    if (startNodeIndex + 1 < roadCenterline.Count)
+                    {
+                        newAiCar.Direction = Vector3D.Normalize(roadCenterline[startNodeIndex + 1] - roadCenterline[startNodeIndex]);
+                        newAiCar.Rotation = MathF.Atan2(newAiCar.Direction.X, newAiCar.Direction.Z);
+                    }
+                }
+                aiCars.Add(newAiCar);
+                Console.WriteLine($"AI car {i} created, starting at path index {newAiCar.CurrentPathIndex} at position: {newAiCar.Position}");
+            }
 
             CreateSkybox(Gl);
             CreateSkyboxShader();
@@ -610,6 +648,13 @@ namespace Szeminarium1_24_02_17_2
                 }
             }
 
+            foreach (AiCar aiCar in aiCars)
+            {
+                aiCar.Update(dt);
+                Console.WriteLine($"AI car at position: {aiCar.Position}");
+            }
+            Console.WriteLine("Finished updating AI cars.");
+
             if (roadCenterline.Count > 0)
             {
                 Vector3D<float> targetPoint = roadCenterline[roadCenterline.Count - 1];
@@ -655,6 +700,20 @@ namespace Szeminarium1_24_02_17_2
             Gl.BindVertexArray(roadVAO);
             Gl.DrawElements(GLEnum.Triangles, roadIndicesCount, GLEnum.UnsignedInt, (void*)0);
             Gl.BindVertexArray(0);
+
+            Gl.UseProgram(program);
+            foreach (AiCar aiCar in aiCars)
+            {
+                if (aiCar.Model != null)
+                {
+                    Matrix4X4<float> aiModelMatrix = aiCar.GetModelMatrix(); // Hívd meg és tárold el
+                    Console.WriteLine($"Rendering AI Car at {aiCar.Position} with matrix: {aiModelMatrix}"); // Debug
+                    SetModelMatrix(aiModelMatrix); // Majd add át
+                    aiCar.Model.DrawWithMaterials();
+                    CheckError($"After drawing AI car at {aiCar.Position}");
+                }
+            }
+            Console.WriteLine("Finished rendering AI cars in Window_Render().");
 
             Gl.DepthFunc(GLEnum.Lequal); // Módosítjuk a mélységtesztet
 
@@ -969,6 +1028,9 @@ namespace Szeminarium1_24_02_17_2
         private static void Window_Closing()
         {
             car.ReleaseGlObject();
+            foreach (var aiCar in aiCars) aiCar.Model.ReleaseGlObject();
+            Gl.DeleteVertexArray(roadVAO);
+            Gl.DeleteBuffer(roadVBO);
             Gl.DeleteVertexArray(skyboxVAO);
             Gl.DeleteBuffer(skyboxVBO);
             Gl.DeleteBuffer(skyboxEBO);

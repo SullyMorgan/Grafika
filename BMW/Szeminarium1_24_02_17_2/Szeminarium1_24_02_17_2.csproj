@@ -13,6 +13,10 @@
     <None Remove="Resources\bmw.obj" />
     <None Remove="Resources\car.mtl" />
     <None Remove="Resources\car.obj" />
+    <None Remove="Resources\Car2.mtl" />
+    <None Remove="Resources\Car2.obj" />
+    <None Remove="Resources\fiat.mtl" />
+    <None Remove="Resources\fiat.obj" />
     <None Remove="Resources\lamp.obj" />
     <None Remove="Resources\minicooper.obj" />
     <None Remove="Resources\skybox\back.jpg" />
@@ -54,6 +58,10 @@
     <EmbeddedResource Include="Resources\bmw.obj" />
     <EmbeddedResource Include="Resources\car.mtl" />
     <EmbeddedResource Include="Resources\car.obj" />
+    <EmbeddedResource Include="Resources\Car2.mtl" />
+    <EmbeddedResource Include="Resources\Car2.obj" />
+    <EmbeddedResource Include="Resources\fiat.mtl" />
+    <EmbeddedResource Include="Resources\fiat.obj" />
     <EmbeddedResource Include="Resources\lamp.obj" />
     <EmbeddedResource Include="Resources\teapot.obj" />
   </ItemGroup>

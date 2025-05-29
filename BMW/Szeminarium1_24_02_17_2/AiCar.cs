@@ -40,7 +40,7 @@ namespace Szeminarium1_24_02_17_2
 
         public void Update(float deltaTime)
         {
-            if (Path == null || Path.Count < 2 || CurrentPathIndex >= Path.Count - 1)
+            /*if (Path == null || Path.Count < 2 || CurrentPathIndex >= Path.Count - 1)
                 return;
 
             Vector3D<float> targetPoint = Path[CurrentPathIndex + 1];
@@ -57,7 +57,8 @@ namespace Szeminarium1_24_02_17_2
                 {
                     Console.WriteLine("AI car reached the end.");
                 }
-            }
+            }*/
+            Position += Direction * Speed * deltaTime;
         }
 
         public Matrix4X4<float> GetModelMatrix()
