@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Numerics;
 
-namespace Szeminarium1_24_02_17_2
+namespace Projekt
 {
     internal class Material
     {

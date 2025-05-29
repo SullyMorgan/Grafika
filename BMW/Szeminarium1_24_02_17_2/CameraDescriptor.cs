@@ -1,6 +1,6 @@
 ﻿using Silk.NET.Maths;
 
-namespace Szeminarium1_24_02_17_2
+namespace Projekt
 {
     internal class CameraDescriptor
     {

@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System;
 
-namespace Szeminarium1_24_02_17_2
+namespace Projekt
 {
     internal class AiCar
     {

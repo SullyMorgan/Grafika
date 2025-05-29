@@ -9,7 +9,7 @@ using System.Numerics;
 using StbImageSharp;
 using Silk.NET.Core.Attributes;
 
-namespace Szeminarium1_24_02_17_2
+namespace Projekt
 {
     internal static class Program
     {
@@ -31,7 +31,7 @@ namespace Szeminarium1_24_02_17_2
 
         private static Vector3D<float> carPosition = new Vector3D<float>(0f, 0f, 0f);
         private static Vector3D<float> carDirection = new Vector3D<float>(0f, 0f, 1f);
-        private static float carRotation = 0f; // in radians
+        private static float carRotation = 0f;
 
         private static Matrix4X4<float> viewMatrix;
 
@@ -246,7 +246,6 @@ namespace Szeminarium1_24_02_17_2
                 Console.WriteLine("Failed to create input context");
             }
 
-            CheckError("ha a loadban is van error beleverem a faszomat");
             controller = new ImGuiController(Gl, window, inputContext);
 
             LinkProgram();
@@ -257,17 +256,15 @@ namespace Szeminarium1_24_02_17_2
                 keyboard.KeyUp += Keyboard_KeyUp;
             }
 
-            // Handle resizes
             window.FramebufferResize += s =>
             {
-                // Adjust the viewport to the new window size
                 Gl.Viewport(s);
             };
 
             car = ObjResourceReader.CreateFromObjWithMaterials(
                 Gl,
-                "Szeminarium1_24_02_17_2.Resources.car.obj",
-                "Szeminarium1_24_02_17_2.Resources.car.mtl"
+                "Projekt.Resources.car.obj",
+                "Projekt.Resources.car.mtl"
                 );
 
             if (car == null)
@@ -314,8 +311,8 @@ namespace Szeminarium1_24_02_17_2
             {
                 GlObject aiCarModel = ObjResourceReader.CreateFromObjWithMaterials(
                     Gl,
-                    "Szeminarium1_24_02_17_2.Resources.fiat.obj",
-                    "Szeminarium1_24_02_17_2.Resources.fiat.mtl"
+                    "Projekt.Resources.fiat.obj",
+                    "Projekt.Resources.fiat.mtl"
                 );
                 if (aiCarModel == null)
                 {
@@ -443,7 +440,6 @@ namespace Szeminarium1_24_02_17_2
             Gl.FrontFace(GLEnum.CW);
 
             Gl.DepthFunc(DepthFunction.Lequal);
-            CheckError("ha a load vegen is van error beleverem a faszomat");
         }
 
         private static unsafe void SetMaterialUniforms(Material material)
