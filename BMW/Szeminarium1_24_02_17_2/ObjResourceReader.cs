@@ -434,7 +434,6 @@ namespace Szeminarium1_24_02_17_2
                     materialRanges[currentMaterial].Add((materialStartIndex, count));
                 }
             }
-            //Console.WriteLine($"Total vertices: {interleavedData.Count / 9}, Total indices: {indices.Count}");
         }
 
         private static void ProcessFaceVertices(

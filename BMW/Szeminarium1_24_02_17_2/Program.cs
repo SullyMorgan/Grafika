@@ -79,7 +79,7 @@ namespace Szeminarium1_24_02_17_2
         private static bool isAPressed = false;
         private static bool isDPressed = false;
 
-        private static float continuousMoveSpeed = 30.0f;
+        private static float continuousMoveSpeed = 60.0f;
         private static float continuousRotationSpeedDegrees = 90.0f;
 
         // uj ut
@@ -100,6 +100,10 @@ namespace Szeminarium1_24_02_17_2
         }
         private static CameraMode currentCameraMode = CameraMode.ThirdPerson;
         private static Vector3D<float> firstPersonOffset = new Vector3D<float>(0f, 0.8f, 1.5f);
+
+        // utkozesek
+        private static float playerCarBoundingRadius = 1.5f;
+        private static float aiCarBoundingRadius = 1.5f;
 
         private static readonly string VertexShaderSource = @"
         #version 330 core
@@ -271,30 +275,20 @@ namespace Szeminarium1_24_02_17_2
                 throw new Exception("Failed to create car object from OBJ file.");
             }
 
-            roadCenterline.Add(new Vector3D<float>(0, 0, -150));     // Start messzebb hátul
-
-            // Első egyenes szakasz
-            roadCenterline.Add(new Vector3D<float>(0, 0, 50));       // Hosszú egyenes előre
-
-            // Első kanyar (enyhe jobbos)
+            roadCenterline.Add(new Vector3D<float>(0, 0, -150));
+            roadCenterline.Add(new Vector3D<float>(0, 0, 50));
             roadCenterline.Add(new Vector3D<float>(20, 0, 100));
             roadCenterline.Add(new Vector3D<float>(50, 0, 130));
             roadCenterline.Add(new Vector3D<float>(90, 0, 150));
-
-            // Második egyenes szakasz
-            roadCenterline.Add(new Vector3D<float>(200, 0, 150));    // Hosszú egyenes oldalra
-
-            // S kanyar
-            roadCenterline.Add(new Vector3D<float>(250, 0, 130));    // Jobbra le
+            roadCenterline.Add(new Vector3D<float>(200, 0, 150));
+            roadCenterline.Add(new Vector3D<float>(250, 0, 130));
             roadCenterline.Add(new Vector3D<float>(280, 0, 100));
-            roadCenterline.Add(new Vector3D<float>(280, 0, 50));     // Egyenes lefelé
-            roadCenterline.Add(new Vector3D<float>(250, 0, 20));     // Balra fel
+            roadCenterline.Add(new Vector3D<float>(280, 0, 50));
+            roadCenterline.Add(new Vector3D<float>(250, 0, 20));
             roadCenterline.Add(new Vector3D<float>(200, 0, 0));
             roadCenterline.Add(new Vector3D<float>(100, 0, 0));
-            roadCenterline.Add(new Vector3D<float>(50, 0, -20));     // Enyhe kanyar
-
-            // Utolsó szakasz a cél felé
-            roadCenterline.Add(new Vector3D<float>(50, 0, -180));    // Hosszú egyenes a célhoz
+            roadCenterline.Add(new Vector3D<float>(50, 0, -20));
+            roadCenterline.Add(new Vector3D<float>(50, 0, -180));
             roadCenterline.Add(new Vector3D<float>(40, 0, -220));
 
             if (roadCenterline.Count > 0)
@@ -308,15 +302,21 @@ namespace Szeminarium1_24_02_17_2
             }
             CreateRoad(Gl);
 
-            int numberOfAiCars = 3;
+            int numberOfAiCars = 8;
             float aiCarSpeed = 4.0f;
+            float minStartDistanceToPlayer = 20.0f;
+            List<Vector3D<float>> occupiedStartPositions = new List<Vector3D<float>>();
+            occupiedStartPositions.Clear();
+            occupiedStartPositions.Add(carPosition);
+            Random random = new Random();
+
             for (int i = 0; i < numberOfAiCars; i++)
             {
                 GlObject aiCarModel = ObjResourceReader.CreateFromObjWithMaterials(
                     Gl,
                     "Szeminarium1_24_02_17_2.Resources.fiat.obj",
                     "Szeminarium1_24_02_17_2.Resources.fiat.mtl"
-                    );
+                );
                 if (aiCarModel == null)
                 {
                     throw new Exception("Failed to create AI car object from OBJ file.");
@@ -328,28 +328,88 @@ namespace Szeminarium1_24_02_17_2
                     continue;
                 }
 
-                int startNodeIndex = (i * (pathNodeCount / (numberOfAiCars + 1))) % pathNodeCount;
+                Vector3D<float> aiStartPosition;
+                int chosenStartNodeIndex = -1;
+                bool positionFound = false;
+                int attempts = 0;
+                int maxPlacementAttempts = 20;
 
-                if (startNodeIndex >= pathNodeCount -1 && pathNodeCount > 1)
+                while (!positionFound && attempts < maxPlacementAttempts)
                 {
-                    startNodeIndex = pathNodeCount - 2;
+                    int potentialStartIndex;
+                    int minValidIndexForSpawn = 1;
+                    int lastValidIndexForSpawn = pathNodeCount - 2;
+
+                    if (pathNodeCount < 2)
+                    {
+                        chosenStartNodeIndex = -1;
+                        break;
+                    }
+
+                    if (lastValidIndexForSpawn < minValidIndexForSpawn)
+                    {
+                        if (pathNodeCount > 1)
+                        {
+                            potentialStartIndex = 0;
+
+                            if (pathNodeCount - 1 > 0)
+                            {
+                                potentialStartIndex = random.Next(0, pathNodeCount - 1);
+                            }
+                            else
+                            {
+                                chosenStartNodeIndex = -1;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            chosenStartNodeIndex = -1;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        potentialStartIndex = random.Next(minValidIndexForSpawn, lastValidIndexForSpawn + 1);
+                    }
+
+                    if (potentialStartIndex < 0 || potentialStartIndex >= pathNodeCount)
+                    {
+                        attempts++;
+                        continue;
+                    }
+
+                    aiStartPosition = roadCenterline[potentialStartIndex];
+
+                    if (Vector3D.DistanceSquared(aiStartPosition, carPosition) < minStartDistanceToPlayer * minStartDistanceToPlayer)
+                    {
+                        attempts++;
+                        continue;
+                    }
+
+                    chosenStartNodeIndex = potentialStartIndex;
+                    positionFound = true;
                 }
-                if (startNodeIndex < 0) startNodeIndex = 0;
 
-                AiCar newAiCar = new AiCar(
-                    aiCarModel,
-                    roadCenterline,
-                    aiCarSpeed
-                );
-
-                newAiCar.Position = roadCenterline[startNodeIndex];
-                if (startNodeIndex + 1 < pathNodeCount)
+                if (!positionFound)
                 {
-                    newAiCar.Direction = Vector3D.Normalize(roadCenterline[startNodeIndex + 1] - roadCenterline[startNodeIndex]);
+                    aiCarModel.ReleaseGlObject();
+                    continue;
                 }
-                else if (startNodeIndex > 0)
+
+                occupiedStartPositions.Add(roadCenterline[chosenStartNodeIndex]);
+
+                AiCar newAiCar = new AiCar(aiCarModel, roadCenterline, aiCarSpeed);
+                newAiCar.CurrentPathIndex = chosenStartNodeIndex;
+                newAiCar.Position = roadCenterline[chosenStartNodeIndex];
+
+                if (chosenStartNodeIndex + 1 < pathNodeCount)
                 {
-                    newAiCar.Direction = Vector3D.Normalize(roadCenterline[startNodeIndex] - roadCenterline[startNodeIndex - 1]);
+                    newAiCar.Direction = Vector3D.Normalize(roadCenterline[chosenStartNodeIndex + 1] - roadCenterline[chosenStartNodeIndex]);
+                }
+                else if (chosenStartNodeIndex > 0)
+                {
+                    newAiCar.Direction = Vector3D.Normalize(roadCenterline[chosenStartNodeIndex] - roadCenterline[chosenStartNodeIndex - 1]);
                 }
                 else
                 {
@@ -358,7 +418,7 @@ namespace Szeminarium1_24_02_17_2
                 newAiCar.Rotation = MathF.Atan2(newAiCar.Direction.X, newAiCar.Direction.Z);
 
                 aiCars.Add(newAiCar);
-                Console.WriteLine($"AI car {i} created, starting at path index {startNodeIndex} at position: {newAiCar.Position}, direction: {newAiCar.Direction}, rotation: {newAiCar.Rotation}");
+                Console.WriteLine($"AI car {i} created, starting at path index {chosenStartNodeIndex} at position: {newAiCar.Position}, direction: {newAiCar.Direction}, rotation: {newAiCar.Rotation}");
             }
 
             CreateSkybox(Gl);
@@ -609,7 +669,6 @@ namespace Szeminarium1_24_02_17_2
                 0f,
                 MathF.Cos(carRotation)
                 );
-            //Console.WriteLine($"CARROTATION: {carRotation}, CARDIRECTION: {carDirection}");
 
             carDirection = Vector3D.Normalize(carDirection);
         }
@@ -695,6 +754,20 @@ namespace Szeminarium1_24_02_17_2
             }
             Console.WriteLine("Finished updating AI cars.");
 
+            foreach (AiCar aiCar in aiCars)
+            {
+                float distanceSquared = Vector3D.DistanceSquared(carPosition, aiCar.Position);
+                float sumOfRadii = playerCarBoundingRadius + aiCarBoundingRadius;
+                float sumOfRadiiSquared = sumOfRadii * sumOfRadii;
+
+                if (distanceSquared < sumOfRadiiSquared)
+                {
+                    Console.WriteLine("Utkozes! Vesztettel!");
+                    window.Close();
+                    return;
+                }
+            }
+
             if (roadCenterline.Count > 0)
             {
                 Vector3D<float> targetPoint = roadCenterline[roadCenterline.Count - 1];
@@ -709,9 +782,6 @@ namespace Szeminarium1_24_02_17_2
 
         private static unsafe void Window_Render(double deltaTime)
         {
-            //Console.WriteLine($"Render after {deltaTime} [s].");
-
-            // GL here
             while (Gl.GetError() != GLEnum.NoError) { }
             controller.Update((float)deltaTime);
             Gl.Clear(ClearBufferMask.ColorBufferBit);
@@ -746,8 +816,7 @@ namespace Szeminarium1_24_02_17_2
             {
                 if (aiCar.Model != null)
                 {
-                    Matrix4X4<float> aiModelMatrix = aiCar.GetModelMatrix(); // Hívd meg és tárold el
-                    Console.WriteLine($"Rendering AI Car at {aiCar.Position} with matrix: {aiModelMatrix}"); // Debug
+                    Matrix4X4<float> aiModelMatrix = aiCar.GetModelMatrix();
                     SetModelMatrix(aiModelMatrix); // Majd add át
                     aiCar.Model.DrawWithMaterials();
                     CheckError($"After drawing AI car at {aiCar.Position}");
@@ -755,7 +824,7 @@ namespace Szeminarium1_24_02_17_2
             }
             Console.WriteLine("Finished rendering AI cars in Window_Render().");
 
-            Gl.DepthFunc(GLEnum.Lequal); // Módosítjuk a mélységtesztet
+            Gl.DepthFunc(GLEnum.Lequal);
 
             Gl.UseProgram(skyboxProgram);
             var viewWithoutTranslation = new Matrix4X4<float>(
@@ -792,7 +861,6 @@ namespace Szeminarium1_24_02_17_2
             ImGuiNET.ImGui.End();
 
             controller.Render();
-            //Console.WriteLine("ImGui rendered.");
         }
 
 
@@ -831,9 +899,7 @@ namespace Szeminarium1_24_02_17_2
                 throw new Exception($"{ViewPosVariableName} uniform not found on shader.");
             }
 
-            // Használd a currentCameraPosition változót a viewPos uniformhoz
             Gl.Uniform3(location, currentCameraPosition.X, currentCameraPosition.Y, currentCameraPosition.Z);
-            //Console.WriteLine($"SetViewerPosition called with: {currentCameraPosition}");
             CheckError("SetViewerPosition");
         }
 
@@ -853,10 +919,8 @@ namespace Szeminarium1_24_02_17_2
 
         private static unsafe void DrawCar()
         {
-            //var baseRotation = Matrix4X4.CreateRotationY(MathF.PI);
             var currentRotation = Matrix4X4.CreateRotationY(carRotation);
             var translation = Matrix4X4.CreateTranslation(carPosition);
-            //var modelMatrix = translation * currentRotation;
             var modelMatrix = currentRotation * translation;
 
             SetModelMatrix(modelMatrix);
@@ -888,8 +952,8 @@ namespace Szeminarium1_24_02_17_2
             // szegmensek letrehozasa
             for (int i = 0; i < roadCenterline.Count - 1; i++)
             {
-                Vector3D<float> p1 = roadCenterline[i]; // p1 Y szintje adja az aktuális szegmens alap Y-ját
-                Vector3D<float> p2_centerline = roadCenterline[i + 1]; // p2 Y szintje adja a következő pont alap Y-ját
+                Vector3D<float> p1 = roadCenterline[i];
+                Vector3D<float> p2_centerline = roadCenterline[i + 1];
 
                 Vector3D<float> direction = Vector3D.Normalize(p2_centerline - roadCenterline[i]);
                 if (direction.LengthSquared < 0.001f) continue;
@@ -1032,9 +1096,6 @@ namespace Szeminarium1_24_02_17_2
                 throw new Exception($"{ModelMatrixVariableName} uniform not found on shader.");
             }
 
-            //Console.WriteLine($"Uniform location: {location}");
-            //Console.WriteLine($"Model matrix: {modelMatrix}");
-
             Gl.UniformMatrix4(location, 1, false, (float*)&modelMatrix);
             CheckError("SetModelMatrix1");
 
@@ -1109,7 +1170,6 @@ namespace Szeminarium1_24_02_17_2
             }
 
             Gl.UniformMatrix4(viewMatrixLocation, 1, false, (float*)&viewMatrix);
-            //Console.WriteLine($"View matrix: {viewMatrix}");
             CheckError("SetViewMatrix");
         }
 

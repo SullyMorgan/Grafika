@@ -45,7 +45,6 @@ namespace Szeminarium1_24_02_17_2
                 string materialName = materialEntry.Key;
                 foreach (var range in materialEntry.Value)
                 {
-                    //Console.WriteLine($"Start: {range.Start}, Count: {range.Count}");
                     Gl.DrawElements(
                         PrimitiveType.Triangles,
                         range.Count,
